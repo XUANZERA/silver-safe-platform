@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.pyc
+
+# conda
+.env
+
+# node
+node_modules/
+dist/
+
+# vscode
+.vscode/
+
+# database
+*.db
+
+# logs
+*.log
