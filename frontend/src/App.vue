@@ -1,7 +1,8 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
+import MapCanvas from "./components/map/MapCanvas.vue"
 </script>
 
+
 <template>
-  <HelloWorld />
+<MapCanvas/>
 </template>
