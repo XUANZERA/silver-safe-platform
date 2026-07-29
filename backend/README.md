@@ -1,8 +1,3 @@
-# 银发独游协同平台
-
-当前 `starreslzx` 分支提供可独立运行的后端基础设施和安全认证模块，供前端优先完成
-登录、身份恢复、令牌刷新、退出登录与角色跳转。
-
 ## 已提供接口
 
 统一前缀：`/api/v1`
@@ -22,11 +17,11 @@
 - Python 3.12
 - Node.js 20 或更高版本（仅前端需要）
 
-Docker 不是当前登录联调的必要条件。
-
 ## 后端启动
 
 在仓库根目录执行：
+
+虚拟环境用conda也可以
 
 ```powershell
 python -m venv .venv
@@ -34,13 +29,6 @@ python -m venv .venv
 python -m pip install -r backend\requirements.txt
 Copy-Item .env.example .env
 python -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
-```
-
-出现以下提示表示启动成功：
-
-```text
-Uvicorn running on http://127.0.0.1:8000
-Application startup complete
 ```
 
 可访问：
@@ -60,8 +48,6 @@ Application startup complete
 | `elder01` | 老人 |
 | `family01` | 子女 |
 | `operator01` | 运营人员 |
-
-演示密码仅用于本地开发，不得用于生产环境。
 
 ## 前端联调
 
@@ -102,9 +88,6 @@ python -m pytest
 python -m ruff check backend
 python -m ruff format --check backend
 ```
-
-认证测试覆盖登录、密码哈希、JWT、身份恢复、刷新令牌轮换、旧令牌复用撤销、
-退出登录、HttpOnly Cookie、生产密钥检查和前端 CORS。
 
 ## 环境配置
 
