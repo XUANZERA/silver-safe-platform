@@ -53,4 +53,11 @@ def get_db() -> Iterator[Session]:
 
 
 def init_database() -> None:
+    import app.models  # noqa: F401
+    from app.services.security_maintenance import prune_expired_security_data
+    from app.services.seed import seed_demo_data
+
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as session:
+        seed_demo_data(session)
+        prune_expired_security_data(session)
