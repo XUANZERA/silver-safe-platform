@@ -15,7 +15,7 @@
 | POST | `/auth/refresh` | 轮换刷新令牌 |
 | POST | `/auth/logout` | 撤销当前会话 |
 
-完整请求和响应示例见 [`docs/auth-api.md`](docs/auth-api.md)。
+完整请求和响应示例见 [`docs/auth-api.md`](../docs/auth-api.md)。
 
 ## 环境要求
 
@@ -108,6 +108,5 @@ python -m ruff format --check backend
 
 ## 环境配置
 
-配置示例位于 [`.env.example`](.env.example)。生产环境必须替换
+配置示例位于 [`.env.example`](../.env.example)。生产环境必须替换
 `SECRET_KEY`，并通过 HTTPS 部署以启用安全 Cookie。
-
