@@ -1,6 +1,8 @@
 # python
 __pycache__/
 *.pyc
+.venv/
+venv/
 
 # conda
 .env
@@ -17,3 +19,7 @@ dist/
 
 # logs
 *.log
+
+# meta info
+.env.local
+.env.*.local
