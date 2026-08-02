@@ -4,16 +4,31 @@ __pycache__/
 
 # conda
 .env
+.venv/
 
 # node
 node_modules/
 dist/
 
 # vscode
-.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
 
 # database
 *.db
+data/
 
 # logs
 *.log
+
+# local review/build artifacts
+.codex-doc-review/
+tmp/
+pytest-cache-files-*/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage

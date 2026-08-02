@@ -1,20 +1,5 @@
-from fastapi import FastAPI
+"""Compatibility entry point for ``uvicorn main:app``."""
 
+from app.main import app
 
-app = FastAPI(
-    title="银发安心服务平台"
-)
-
-
-@app.get("/")
-def home():
-    return {
-        "message":"platform running"
-    }
-
-
-@app.get("/health")
-def health():
-    return {
-        "status":"ok"
-    }
+__all__ = ["app"]
