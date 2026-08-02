@@ -5,6 +5,7 @@ __pycache__/
 # conda
 .env
 .venv/
+venv/
 
 # node
 node_modules/
@@ -32,3 +33,7 @@ pytest-cache-files-*/
 .ruff_cache/
 htmlcov/
 .coverage
+
+# meta info
+.env.local
+.env.*.local
