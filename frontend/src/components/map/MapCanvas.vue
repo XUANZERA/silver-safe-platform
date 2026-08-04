@@ -1,579 +1,789 @@
 <template>
-    <div class="map-wrapper">
-        <div
-            id="map"
-            class="map-container"
-        ></div>
+  <div class="map-wrapper">
+    <div
+      id="map"
+      class="map-container"
+    ></div>
 
-        <div
-            v-if="mapMessage"
-            class="map-message"
+    <div class="simulation-panel">
+      <div class="button-row">
+        <button
+          type="button"
+          :disabled="
+            !simulatorReady ||
+            simulationStatus === 'RUNNING'
+          "
+          @click="startSimulation"
         >
-            {{ mapMessage }}
-        </div>
+          开始模拟
+        </button>
+
+        <button
+          type="button"
+          :disabled="
+            simulationStatus !== 'RUNNING'
+          "
+          @click="pauseSimulation"
+        >
+          暂停
+        </button>
+
+        <button
+          type="button"
+          :disabled="!simulatorReady"
+          @click="resetSimulation"
+        >
+          重置
+        </button>
+      </div>
+
+      <p>
+        模拟状态：
+        <strong>{{ simulationStatus }}</strong>
+      </p>
+
+      <p>
+        定位进度：
+        {{ currentPointNumber }}/{{ totalPoints }}
+      </p>
+
+      <p>
+        围栏状态：
+        <strong>{{ riskStatus }}</strong>
+      </p>
+
+      <p>
+        距围栏中心：
+        {{ currentDistanceMeters }} 米
+      </p>
+
+      <p>
+        连续越界点：
+        {{ consecutiveOutsideCount }}
+      </p>
+
+      <div
+        v-if="riskEvents.length > 0"
+        class="event-box"
+      >
+        <strong>最新风险事件</strong>
+
+        <p>{{ riskEvents[0].message }}</p>
+
+        <p>
+          {{ riskEvents[0].displayTime }}
+        </p>
+      </div>
     </div>
+
+    <div
+      v-if="mapMessage"
+      class="map-message"
+    >
+      {{ mapMessage }}
+    </div>
+  </div>
 </template>
 
+
 <script setup>
-import { onMounted, ref } from "vue"
+import {
+  onMounted,
+  onUnmounted,
+  ref,
+} from "vue"
+
 import AMapLoader from "@amap/amap-jsapi-loader"
 
 import elderIcon from "./elder.png"
-import { servicePoints } from "../../mock/servicePoints.js"
-import { elderTrack } from "../../mock/track.js"
-import { geofence } from "../../mock/geofence.js"
+
 import {
-    evaluateGeofence,
-    isValidCoordinate,
-    isValidGeofence,
-} from "../../utils/geofence.js"
+  servicePoints,
+} from "../../mock/servicePoints.js"
+
+import {
+  elderTrack,
+} from "../../mock/track.js"
+
+import {
+  geofence,
+} from "../../mock/geofence.js"
+
+import {
+  createLocationSimulator,
+} from "../../services/locationSimulator.js"
+
+import {
+  createInitialGeofenceRiskState,
+  detectGeofenceRisk,
+} from "../../domain/risk/geofenceRisk.js"
 
 
-// 页面上显示的状态或警告信息
 const mapMessage = ref("")
 
+const simulatorReady = ref(false)
 
-/**
- * 清洗轨迹数据。
- */
-function normalizeTrack(rawTrack) {
-    if (!Array.isArray(rawTrack)) {
-        console.warn("轨迹数据不是数组：", rawTrack)
-        return []
-    }
+const simulationStatus = ref("IDLE")
 
-    return rawTrack.filter(isValidCoordinate)
+const currentPointNumber = ref(0)
+
+const totalPoints = ref(0)
+
+const riskStatus = ref("SAFE")
+
+const currentDistanceMeters = ref(0)
+
+const consecutiveOutsideCount = ref(0)
+
+const riskEvents = ref([])
+
+
+let mapInstance = null
+let geofenceCircle = null
+let elderMarker = null
+let dynamicTrackLine = null
+let simulator = null
+
+let simulationPoints = []
+let passedTrack = []
+
+let geofenceRiskState =
+  createInitialGeofenceRiskState()
+
+
+function isValidCoordinate(point) {
+  return (
+    point &&
+    typeof point === "object" &&
+    Number.isFinite(point.longitude) &&
+    Number.isFinite(point.latitude) &&
+    point.longitude >= -180 &&
+    point.longitude <= 180 &&
+    point.latitude >= -90 &&
+    point.latitude <= 90
+  )
 }
 
 
-/**
- * 清洗服务点数据。
- */
-function normalizeServicePoints(rawServicePoints) {
-    if (!Array.isArray(rawServicePoints)) {
-        console.warn(
-            "服务点数据不是数组：",
-            rawServicePoints,
-        )
+function normalizeCoordinateList(rawPoints) {
+  if (!Array.isArray(rawPoints)) {
+    return []
+  }
 
-        return []
-    }
-
-    return rawServicePoints.filter(isValidCoordinate)
+  return rawPoints.filter(isValidCoordinate)
 }
 
 
-/**
- * 创建地图底图。
- */
+function isValidGeofence(fence) {
+  return (
+    fence &&
+    typeof fence === "object" &&
+    isValidCoordinate(fence.center) &&
+    Number.isFinite(fence.radius) &&
+    fence.radius > 0
+  )
+}
+
+
+function createElderIconElement() {
+  const image =
+    document.createElement("img")
+
+  image.src = elderIcon
+  image.alt = "老人当前位置"
+
+  image.style.display = "block"
+  image.style.width = "36px"
+  image.style.height = "36px"
+  image.style.maxWidth = "none"
+  image.style.objectFit = "contain"
+
+  return image
+}
+
+
 function createMap(AMap) {
-    return new AMap.Map("map", {
-        zoom: 15,
+  return new AMap.Map("map", {
+    zoom: 15,
 
-        center: [
-            113.2644,
-            23.1291,
-        ],
-    })
+    center: [
+      geofence.center.longitude,
+      geofence.center.latitude,
+    ],
+  })
 }
 
 
-/**
- * 创建圆形电子围栏。
- *
- * 返回值：
- * AMap.Circle 对象
- */
-function createGeofenceCircle(AMap, map, fence) {
-    if (!isValidGeofence(fence)) {
-        throw new Error("电子围栏配置不合法")
-    }
-
-    const fenceCenter = new AMap.LngLat(
-        fence.center.longitude,
-        fence.center.latitude,
-    )
-
-    const geofenceCircle = new AMap.Circle({
-        center: fenceCenter,
-
-        // 实际地理半径，单位为米
-        radius: fence.radius,
-
-        strokeColor: "#1677FF",
-        strokeWeight: 3,
-        strokeOpacity: 0.9,
-
-        fillColor: "#1677FF",
-        fillOpacity: 0.12,
-
-        zIndex: 10,
-    })
-
-    map.add(geofenceCircle)
-
-    return geofenceCircle
-}
-
-
-/**
- * 使用高德地图的 GeometryUtil 计算两个经纬度点之间的实际距离。
- */
-function createDistanceCalculator(AMap) {
-    return (point, center) => {
-        const pointLngLat = new AMap.LngLat(
-            point.longitude,
-            point.latitude,
-        )
-
-        const centerLngLat = new AMap.LngLat(
-            center.longitude,
-            center.latitude,
-        )
-
-        return AMap.GeometryUtil.distance(
-            pointLngLat,
-            centerLngLat,
-        )
-    }
-}
-
-
-/**
- * 告警状态下将围栏切换为红色。
- */
-function updateGeofenceCircleStyle(
-    geofenceCircle,
-    geofenceState,
+function createGeofenceCircle(
+  AMap,
+  map,
 ) {
-    if (!geofenceState?.isConfirmedOutside) {
-        return
-    }
+  const circle = new AMap.Circle({
+    center: [
+      geofence.center.longitude,
+      geofence.center.latitude,
+    ],
 
-    geofenceCircle.setOptions({
-        strokeColor: "#FF4D4F",
-        fillColor: "#FF4D4F",
-        fillOpacity: 0.18,
+    radius: geofence.radius,
+
+    strokeColor: "#1677FF",
+    strokeWeight: 3,
+    strokeOpacity: 0.9,
+
+    fillColor: "#1677FF",
+    fillOpacity: 0.12,
+
+    zIndex: 10,
+  })
+
+  map.add(circle)
+
+  return circle
+}
+
+
+function createDynamicTrackLine(
+  AMap,
+  map,
+) {
+  const line = new AMap.Polyline({
+    // 初始没有已走轨迹
+    path: [],
+
+    strokeColor: "#3366FF",
+    strokeWeight: 6,
+    strokeOpacity: 0.9,
+
+    lineJoin: "round",
+    lineCap: "round",
+
+    zIndex: 20,
+  })
+
+  map.add(line)
+
+  return line
+}
+
+
+function createElderMarker(
+  AMap,
+  map,
+  initialPoint,
+) {
+  const marker = new AMap.Marker({
+    position: [
+      initialPoint.longitude,
+      initialPoint.latitude,
+    ],
+
+    content: createElderIconElement(),
+
+    anchor: "bottom-center",
+    title: "老人当前位置",
+    zIndex: 100,
+  })
+
+  marker.setLabel({
+    direction: "top",
+    offset: new AMap.Pixel(0, -8),
+    content: "等待开始模拟",
+  })
+
+  map.add(marker)
+
+  return marker
+}
+
+
+function createStartMarker(
+  AMap,
+  map,
+  initialPoint,
+) {
+  const marker = new AMap.Marker({
+    position: [
+      initialPoint.longitude,
+      initialPoint.latitude,
+    ],
+
+    title: "老人出游起点",
+  })
+
+  marker.setLabel({
+    direction: "bottom",
+    offset: new AMap.Pixel(0, 5),
+    content: "老人出游起点",
+  })
+
+  map.add(marker)
+
+  return marker
+}
+
+
+function createServiceMarkers(
+  AMap,
+  map,
+  validServicePoints,
+) {
+  const markers =
+    validServicePoints.map((point) => {
+      const pointName =
+        point.name ?? "未命名服务点"
+
+      const marker = new AMap.Marker({
+        position: [
+          point.longitude,
+          point.latitude,
+        ],
+
+        title: pointName,
+      })
+
+      marker.setLabel({
+        direction: "top",
+        offset: new AMap.Pixel(0, -5),
+        content: pointName,
+      })
+
+      return marker
     })
+
+  if (markers.length > 0) {
+    map.add(markers)
+  }
+
+  return markers
+}
+
+
+function formatCurrentTime() {
+  return new Date().toLocaleTimeString(
+    "zh-CN",
+    {
+      hour12: false,
+    },
+  )
+}
+
+
+function getRiskStatusText(status) {
+  if (status === "ALERT") {
+    return "🚨 已确认越界"
+  }
+
+  if (status === "PENDING") {
+    return "⚠️ 越界待确认"
+  }
+
+  return "✅ 围栏内安全"
+}
+
+
+function updateGeofenceAppearance(status) {
+  if (!geofenceCircle) {
+    return
+  }
+
+  if (status === "ALERT") {
+    geofenceCircle.setOptions({
+      strokeColor: "#FF4D4F",
+      fillColor: "#FF4D4F",
+      fillOpacity: 0.2,
+    })
+
+    return
+  }
+
+  if (status === "PENDING") {
+    geofenceCircle.setOptions({
+      strokeColor: "#FA8C16",
+      fillColor: "#FA8C16",
+      fillOpacity: 0.16,
+    })
+
+    return
+  }
+
+  geofenceCircle.setOptions({
+    strokeColor: "#1677FF",
+    fillColor: "#1677FF",
+    fillOpacity: 0.12,
+  })
 }
 
 
 /**
- * 把围栏判定结果输出到控制台，方便演示和排查。
+ * 每收到一个模拟定位点时执行。
  */
-function logGeofenceState(geofenceState) {
-    if (!geofenceState) {
-        return
-    }
+function handleLocationPoint(
+  rawPoint,
+  pointIndex,
+) {
+  const point = {
+    ...rawPoint,
+    recordedAt: formatCurrentTime(),
+  }
 
-    console.log(
-        "老人距离围栏中心：",
-        Math.round(geofenceState.distanceToFenceCenter),
-        "米",
-    )
+  passedTrack.push(point)
 
-    console.log(
-        "老人是否越界：",
-        geofenceState.isLatestPointOutside,
-    )
+  currentPointNumber.value =
+    pointIndex + 1
 
-    console.log("围栏状态：", geofenceState.status)
-    console.log("围栏说明：", geofenceState.statusText)
-}
+  // 1. 更新老人Marker
+  elderMarker.setPosition([
+    point.longitude,
+    point.latitude,
+  ])
 
-
-/**
- * 创建老人轨迹线。
- *
- * 轨迹少于两个点时不创建折线。
- */
-function createTrackLine(AMap, map, validTrack) {
-    if (validTrack.length < 2) {
-        return null
-    }
-
-    const trackPath = validTrack.map((point) => [
-        point.longitude,
-        point.latitude,
+  // 2. 更新已经走过的轨迹
+  const passedPath =
+    passedTrack.map((trackPoint) => [
+      trackPoint.longitude,
+      trackPoint.latitude,
     ])
 
-    const trackLine = new AMap.Polyline({
-        path: trackPath,
-        strokeColor: "#3366FF",
-        strokeWeight: 6,
-        strokeOpacity: 0.9,
-        lineJoin: "round",
-        lineCap: "round",
-        zIndex: 20,
-    })
+  dynamicTrackLine.setPath(passedPath)
 
-    map.add(trackLine)
+  // 3. 执行电子围栏风险检测
+  const result = detectGeofenceRisk({
+    point,
+    fence: geofence,
+    previousState: geofenceRiskState,
+    threshold: 3,
+  })
 
-    return trackLine
-}
+  geofenceRiskState = result
 
+  riskStatus.value = result.status
 
-/**
- * 创建老人图标对应的 HTML 元素。
- */
-function createElderIconElement() {
-    const image = document.createElement("img")
+  currentDistanceMeters.value =
+    Math.round(result.distanceMeters)
 
-    image.src = elderIcon
-    image.alt = "老人当前位置"
+  consecutiveOutsideCount.value =
+    result.consecutiveOutside
 
-    image.width = 36
-    image.height = 36
+  // 4. 更新老人标签
+  elderMarker.setLabel({
+    direction: "top",
+    offset: new window.AMap.Pixel(0, -8),
 
-    image.style.display = "block"
-    image.style.width = "36px"
-    image.style.height = "36px"
-    image.style.maxWidth = "none"
-    image.style.objectFit = "contain"
+    content:
+      `${getRiskStatusText(result.status)} | ` +
+      `${currentDistanceMeters.value}米 | ` +
+      `${point.recordedAt}`,
+  })
 
-    return image
-}
+  // 5. 更新围栏颜色
+  updateGeofenceAppearance(
+    result.status,
+  )
 
+  // 6. 首次达到连续3点越界时产生事件
+  if (result.event) {
+    const event = {
+      ...result.event,
 
-/**
- * 创建老人当前位置 Marker。
- *
- * 轨迹为空时不创建。
- */
-function createElderMarker(
-    AMap,
-    map,
-    validTrack,
-    geofenceState,
-) {
-    if (validTrack.length === 0) {
-        return null
+      id:
+        `${result.event.type}-${Date.now()}`,
+
+      displayTime:
+        new Date(
+          result.event.occurredAt,
+        ).toLocaleTimeString(
+          "zh-CN",
+          {
+            hour12: false,
+          },
+        ),
     }
 
-    const latestLocation =
-        validTrack[validTrack.length - 1]
+    riskEvents.value.unshift(event)
 
-    const elderMarker = new AMap.Marker({
-        position: [
-            latestLocation.longitude,
-            latestLocation.latitude,
-        ],
+    // MVP只保留最近5个事件
+    riskEvents.value =
+      riskEvents.value.slice(0, 5)
 
-        content: createElderIconElement(),
-        anchor: "bottom-center",
-        title: "老人当前位置",
+    console.warn(
+      "产生风险事件：",
+      event,
+    )
+  }
+}
 
-        zIndex: 100,
-    })
 
-    const recordedAt =
-        latestLocation.recordedAt ??
-        latestLocation.recordAt ??
-        "时间未知"
+function startSimulation() {
+  if (!simulator) {
+    mapMessage.value =
+      "定位模拟器尚未初始化"
+
+    return
+  }
+
+  // 完成后再次点击开始，自动从头播放
+  if (
+    simulationStatus.value ===
+    "COMPLETED"
+  ) {
+    resetSimulation()
+  }
+
+  simulator.start()
+}
+
+
+function pauseSimulation() {
+  simulator?.pause()
+}
+
+
+function resetSimulation() {
+  simulator?.reset()
+
+  passedTrack = []
+
+  geofenceRiskState =
+    createInitialGeofenceRiskState()
+
+  currentPointNumber.value = 0
+  currentDistanceMeters.value = 0
+  consecutiveOutsideCount.value = 0
+
+  riskStatus.value = "SAFE"
+  riskEvents.value = []
+
+  dynamicTrackLine?.setPath([])
+
+  const firstPoint =
+    simulationPoints[0]
+
+  if (firstPoint && elderMarker) {
+    elderMarker.setPosition([
+      firstPoint.longitude,
+      firstPoint.latitude,
+    ])
 
     elderMarker.setLabel({
-        direction: "top",
-        offset: new AMap.Pixel(0, -8),
-        content: geofenceState
-            ? [
-                geofenceState.statusText,
-                `距围栏中心：${Math.round(
-                    geofenceState.distanceToFenceCenter,
-                )}米`,
-                `更新时间：${recordedAt}`,
-            ].join("<br>")
-            : `老人当前位置 ${recordedAt}`,
+      direction: "top",
+      offset: new window.AMap.Pixel(
+        0,
+        -8,
+      ),
+      content: "等待开始模拟",
     })
+  }
 
-    map.add(elderMarker)
-
-    return elderMarker
+  updateGeofenceAppearance("SAFE")
 }
 
 
-/**
- * 创建老人出游起点。
- *
- * 至少需要两个有效轨迹点；
- * 单点轨迹不重复显示起点和当前位置。
- */
-function createStartMarker(AMap, map, validTrack) {
-    if (validTrack.length < 2) {
-        return null
-    }
-
-    const firstLocation = validTrack[0]
-
-    const startMarker = new AMap.Marker({
-        position: [
-            firstLocation.longitude,
-            firstLocation.latitude,
-        ],
-
-        title: "老人出游起点",
-    })
-
-    startMarker.setLabel({
-        direction: "bottom",
-        offset: new AMap.Pixel(0, 5),
-        content: "老人出游起点",
-    })
-
-    map.add(startMarker)
-
-    return startMarker
-}
-
-
-/**
- * 创建全部服务点 Marker。
- */
-function createServiceMarkers(
-    AMap,
-    map,
-    validServicePoints,
-) {
-    const markers = validServicePoints.map((point) => {
-        const pointName =
-            point.name ?? "未命名服务点"
-
-        const marker = new AMap.Marker({
-            position: [
-                point.longitude,
-                point.latitude,
-            ],
-
-            title: pointName,
-        })
-
-        marker.setLabel({
-            direction: "top",
-            offset: new AMap.Pixel(0, -5),
-            content: pointName,
-        })
-
-        return marker
-    })
-
-    if (markers.length > 0) {
-        map.add(markers)
-    }
-
-    return markers
-}
-
-
-/**
- * 把非空覆盖物添加到 overlays 数组。
- */
-function addOverlay(overlays, overlay) {
-    if (overlay) {
-        overlays.push(overlay)
-    }
-}
-
-
-/**
- * 生成数据清洗提示信息。
- */
-function buildDataMessages(
-    rawTrack,
-    validTrack,
-    rawServicePoints,
-    validServicePoints,
-) {
-    const messages = []
-
-    if (validTrack.length === 0) {
-        messages.push("暂无有效轨迹数据")
-    }
-
-    if (Array.isArray(rawTrack)) {
-        const invalidTrackCount =
-            rawTrack.length - validTrack.length
-
-        if (invalidTrackCount > 0) {
-            messages.push(
-                `已忽略 ${invalidTrackCount} 个非法轨迹点`,
-            )
-        }
-    }
-
-    if (Array.isArray(rawServicePoints)) {
-        const invalidServicePointCount =
-            rawServicePoints.length -
-            validServicePoints.length
-
-        if (invalidServicePointCount > 0) {
-            messages.push(
-                `已忽略 ${invalidServicePointCount} 个非法服务点`,
-            )
-        }
-    }
-
-    return messages
-}
-
-
-/**
- * 初始化整个地图组件。
- *
- * 它只负责安排执行顺序，
- * 具体绘制工作交给上面的函数。
- */
 async function initializeMap() {
-    try {
-        mapMessage.value = ""
+  try {
+    mapMessage.value = ""
 
-        // 1. 加载高德地图 API
-        const AMap = await AMapLoader.load({
-            key: import.meta.env.VITE_AMAP_KEY,
-            version: "2.0",
-        })
-
-        // 2. 创建底图
-        const map = createMap(AMap)
-
-        // 3. 清洗外部输入数据
-        const validTrack =
-            normalizeTrack(elderTrack)
-
-        const validServicePoints =
-            normalizeServicePoints(servicePoints)
-
-        // 4. 保存参与自动缩放的覆盖物
-        const overlays = []
-
-        // 5. 创建电子围栏
-        const geofenceCircle =
-            createGeofenceCircle(
-                AMap,
-                map,
-                geofence,
-            )
-
-        addOverlay(overlays, geofenceCircle)
-
-        // 6. 计算围栏状态；连续三个轨迹点越界才触发正式告警
-        const geofenceState = evaluateGeofence(
-            elderTrack,
-            geofence,
-            createDistanceCalculator(AMap),
-        )
-
-        updateGeofenceCircleStyle(
-            geofenceCircle,
-            geofenceState,
-        )
-
-        logGeofenceState(geofenceState)
-
-        // 7. 创建轨迹线
-        const trackLine =
-            createTrackLine(
-                AMap,
-                map,
-                validTrack,
-            )
-
-        addOverlay(overlays, trackLine)
-
-        // 8. 创建老人当前位置并显示围栏状态
-        const elderMarker =
-            createElderMarker(
-                AMap,
-                map,
-                validTrack,
-                geofenceState,
-            )
-
-        addOverlay(overlays, elderMarker)
-
-        // 9. 创建出游起点
-        const startMarker =
-            createStartMarker(
-                AMap,
-                map,
-                validTrack,
-            )
-
-        addOverlay(overlays, startMarker)
-
-        // 10. 创建服务点
-        const serviceMarkers =
-            createServiceMarkers(
-                AMap,
-                map,
-                validServicePoints,
-            )
-
-        overlays.push(...serviceMarkers)
-
-        // 11. 自动调整地图视野
-        if (overlays.length > 0) {
-            map.setFitView(
-                overlays,
-                false,
-                [60, 60, 60, 60],
-                17,
-            )
-        }
-
-        // 12. 显示数据清洗信息
-        const messages = buildDataMessages(
-            elderTrack,
-            validTrack,
-            servicePoints,
-            validServicePoints,
-        )
-
-        if (messages.length > 0) {
-            mapMessage.value = messages.join("；")
-            console.warn(mapMessage.value)
-        }
-    } catch (error) {
-        console.error(
-            "地图模块初始化失败：",
-            error,
-        )
-
-        const reason =
-            error instanceof Error
-                ? error.message
-                : "未知错误"
-
-        mapMessage.value =
-            `地图初始化失败：${reason}`
+    if (!isValidGeofence(geofence)) {
+      throw new Error(
+        "电子围栏配置不合法",
+      )
     }
+
+    simulationPoints =
+      normalizeCoordinateList(elderTrack)
+
+    if (simulationPoints.length === 0) {
+      throw new Error(
+        "没有有效的模拟轨迹点",
+      )
+    }
+
+    const validServicePoints =
+      normalizeCoordinateList(
+        servicePoints,
+      )
+
+    totalPoints.value =
+      simulationPoints.length
+
+    const AMap =
+      await AMapLoader.load({
+        key:
+          import.meta.env.VITE_AMAP_KEY,
+
+        version: "2.0",
+      })
+
+    mapInstance = createMap(AMap)
+
+    geofenceCircle =
+      createGeofenceCircle(
+        AMap,
+        mapInstance,
+      )
+
+    dynamicTrackLine =
+      createDynamicTrackLine(
+        AMap,
+        mapInstance,
+      )
+
+    const initialPoint =
+      simulationPoints[0]
+
+    elderMarker =
+      createElderMarker(
+        AMap,
+        mapInstance,
+        initialPoint,
+      )
+
+    const startMarker =
+      createStartMarker(
+        AMap,
+        mapInstance,
+        initialPoint,
+      )
+
+    const serviceMarkers =
+      createServiceMarkers(
+        AMap,
+        mapInstance,
+        validServicePoints,
+      )
+
+    // 初始化时显示围栏、起点和服务点
+    mapInstance.setFitView(
+      [
+        geofenceCircle,
+        startMarker,
+        elderMarker,
+        ...serviceMarkers,
+      ],
+
+      false,
+      [60, 60, 60, 60],
+      17,
+    )
+
+    simulator =
+      createLocationSimulator({
+        points: simulationPoints,
+
+        intervalMs: 2000,
+
+        onPoint:
+          handleLocationPoint,
+
+        onStatusChange:
+          (nextStatus) => {
+            simulationStatus.value =
+              nextStatus
+          },
+
+        onComplete: () => {
+          console.log(
+            "定位模拟完成",
+          )
+        },
+      })
+
+    simulatorReady.value = true
+  } catch (error) {
+    console.error(
+      "地图模块初始化失败：",
+      error,
+    )
+
+    mapMessage.value =
+      error instanceof Error
+        ? error.message
+        : "地图初始化失败"
+  }
 }
+
 
 onMounted(initializeMap)
+
+
+/*
+ * 离开页面时停止定时器并销毁地图。
+ */
+onUnmounted(() => {
+  simulator?.destroy()
+  mapInstance?.destroy()
+})
 </script>
+
 
 <style scoped>
 .map-wrapper {
-    position: relative;
-    width: 100%;
+  position: relative;
+  width: 100%;
 }
 
 .map-container {
-    width: 100%;
-    height: 600px;
+  width: 100%;
+  height: 600px;
+}
+
+.simulation-panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 1000;
+
+  width: 260px;
+  padding: 14px;
+
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+
+.simulation-panel p {
+  margin: 8px 0;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.button-row button {
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.button-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.event-box {
+  margin-top: 12px;
+  padding: 10px;
+
+  color: #a8071a;
+  background: #fff1f0;
+  border: 1px solid #ffa39e;
+  border-radius: 8px;
 }
 
 .map-message {
-    position: absolute;
-    top: 16px;
-    left: 50%;
-    z-index: 1000;
-    transform: translateX(-50%);
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 1001;
 
-    max-width: calc(100% - 32px);
-    padding: 10px 16px;
+  transform: translateX(-50%);
 
-    color: #333;
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid #ddd;
-    border-radius: 8px;
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+
+  color: #333;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ddd;
+  border-radius: 8px;
 }
 </style>
