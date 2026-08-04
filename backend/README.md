@@ -9,6 +9,9 @@
 | GET | `/auth/me` | 获取当前用户 |
 | POST | `/auth/refresh` | 轮换刷新令牌 |
 | POST | `/auth/logout` | 撤销当前会话 |
+| GET | `/elders` | 按当前角色列出可访问的老人资料 |
+| GET | `/elders/{elder_id}` | 获取老人详情 |
+| GET | `/elders/{elder_id}/geofence` | 获取老人的圆形安全围栏 |
 
 完整请求和响应示例见 [`docs/auth-api.md`](../docs/auth-api.md)。
 
@@ -92,4 +95,6 @@ python -m ruff format --check backend
 ## 环境配置
 
 配置示例位于 [`.env.example`](../.env.example)。生产环境必须替换
-`SECRET_KEY`，并通过 HTTPS 部署以启用安全 Cookie。
+`SECRET_KEY` 和 `HEALTH_INFO_ENCRYPTION_KEY`，并通过 HTTPS 部署以启用
+安全 Cookie。健康信息在数据库中加密保存；老人及其绑定家属可读取，运营人员默认仅能
+查看脱敏结果。

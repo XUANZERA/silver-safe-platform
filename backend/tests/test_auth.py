@@ -164,3 +164,11 @@ def test_production_rejects_development_secrets() -> None:
             app_env="production",
             secret_key="local-development-only-change-me-2026",
         )
+
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            secret_key="a-strong-production-secret-key-2026",
+            health_info_encryption_key="local-health-info-key-change-me-2026",
+        )

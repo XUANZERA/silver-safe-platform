@@ -7,9 +7,13 @@ from app.schemas.auth import (
     UserRole,
 )
 from app.schemas.common import ApiResponse
+from app.schemas.elder import ElderListResponse, ElderResponse, GeofenceResponse
 
 __all__ = [
     "ApiResponse",
+    "ElderListResponse",
+    "ElderResponse",
+    "GeofenceResponse",
     "LoginRequest",
     "LoginResponse",
     "UserResponse",

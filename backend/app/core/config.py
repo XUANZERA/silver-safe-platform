@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     refresh_cookie_name: str = "silver_safe_refresh"
     jwt_issuer: str = "silver-safe-platform"
     jwt_audience: str = "silver-safe-api"
+    health_info_encryption_key: str = Field(
+        default="local-health-info-key-change-me-2026",
+        min_length=32,
+    )
     database_url: str = "sqlite:///./data/silver_safe.db"
     cors_origins: list[str] = [
         "http://localhost:5173",
@@ -46,6 +50,8 @@ class Settings(BaseSettings):
         weak_prefixes = ("local-", "development-", "replace-")
         if self.secret_key.startswith(weak_prefixes):
             raise ValueError("生产环境必须通过 SECRET_KEY 配置独立随机密钥")
+        if self.health_info_encryption_key.startswith(weak_prefixes):
+            raise ValueError("生产环境必须通过 HEALTH_INFO_ENCRYPTION_KEY 配置独立加密密钥")
         return self
 
 
