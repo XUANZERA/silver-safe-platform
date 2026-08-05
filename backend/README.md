@@ -101,9 +101,13 @@ python -m ruff format --check backend
 ## 环境配置
 
 配置示例位于 [`.env.example`](../.env.example)。生产环境必须替换
-`SECRET_KEY` 和 `HEALTH_INFO_ENCRYPTION_KEY`，并通过 HTTPS 部署以启用
-安全 Cookie。健康信息在数据库中加密保存；老人及其绑定家属可读取，运营人员默认仅能
-查看脱敏结果。
+`SECRET_KEY` 和 `HEALTH_INFO_ENCRYPTION_KEY`，两者至少 32 个字符且不能相同，
+并通过 HTTPS 部署以启用安全 Cookie。生产环境启用 `DEBUG` 会导致启动失败。
+健康信息在数据库中加密保存；老人及其绑定家属可读取，运营人员默认只能查看脱敏结果。
+
+登录失败默认在 300 秒窗口内按账号限制 5 次、按来源 IP 限制 20 次，可通过
+`LOGIN_FAILURE_*` 环境变量调整。默认不信任 `X-Real-IP`；只有后端确实位于可信
+反向代理之后，才应通过 `TRUSTED_PROXY_NETWORKS` 配置代理网段。
 
 接口时间字段统一使用 snake_case，例如 `created_at`、`started_at` 和
 `ended_at`。后端以 UTC 存储并返回 RFC 3339 格式（例如

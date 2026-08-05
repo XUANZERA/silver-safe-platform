@@ -26,12 +26,14 @@ def clean_business_data(client: TestClient) -> Iterator[None]:
     from app.models.security import AuditLog, AuthSession
     from app.models.trip import Trip
 
+    client.cookies.clear()
     with SessionLocal() as session:
         session.execute(delete(AuditLog))
         session.execute(delete(AuthSession))
         session.execute(delete(Trip))
         session.commit()
     yield
+    client.cookies.clear()
 
 
 def pytest_sessionfinish() -> None:

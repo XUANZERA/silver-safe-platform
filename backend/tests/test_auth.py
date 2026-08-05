@@ -92,12 +92,7 @@ def test_refresh_rotation_and_logout_revocation(client: TestClient) -> None:
     assert second_refresh is not None and second_refresh != first_refresh
     assert "refresh_token" not in refreshed_data
 
-    logout = client.post(
-        f"{API}/auth/logout",
-        headers={
-            "Authorization": f"Bearer {refreshed_data['access_token']}",
-        },
-    )
+    logout = client.post(f"{API}/auth/logout")
     assert logout.status_code == 200
 
     revoked = client.get(
@@ -116,7 +111,8 @@ def test_reused_refresh_token_revokes_session(client: TestClient) -> None:
     assert first_refresh is not None
     rotated = client.post(f"{API}/auth/refresh").json()["data"]
 
-    client.cookies.set("silver_safe_refresh", first_refresh)
+    client.cookies.delete("silver_safe_refresh", path=f"{API}/auth")
+    client.cookies.set("silver_safe_refresh", first_refresh, path=f"{API}/auth")
     reused = client.post(f"{API}/auth/refresh")
     assert reused.status_code == 401
     assert reused.json()["error"]["code"] == "REFRESH_TOKEN_REUSED"
@@ -135,10 +131,13 @@ def test_refresh_token_is_http_only_cookie(client: TestClient) -> None:
         json={"username": "elder01", "password": "demo123"},
     )
 
-    cookie = response.headers["set-cookie"].lower()
+    cookies = [value.lower() for value in response.headers.get_list("set-cookie")]
+    cookie = "\n".join(cookies)
     assert "silver_safe_refresh=" in cookie
     assert "httponly" in cookie
     assert "samesite=strict" in cookie
+    assert "path=/api/v1/auth" in cookie
+    assert any("max-age=0" in value and "path=/" in value for value in cookies)
     assert "refresh_token" not in response.json()["data"]
 
 
@@ -171,4 +170,21 @@ def test_production_rejects_development_secrets() -> None:
             app_env="production",
             secret_key="a-strong-production-secret-key-2026",
             health_info_encryption_key="local-health-info-key-change-me-2026",
+        )
+
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            debug=True,
+            secret_key="strong-jwt-signing-key-2026-with-enough-length",
+            health_info_encryption_key="strong-health-encryption-key-2026-separate-value",
+        )
+
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            secret_key="same-production-key-material-2026-long-enough",
+            health_info_encryption_key="same-production-key-material-2026-long-enough",
         )

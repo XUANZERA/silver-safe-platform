@@ -1,4 +1,5 @@
 from functools import lru_cache
+from ipaddress import ip_network
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
 
     secret_key: str = Field(
         default="local-development-only-change-me",
-        min_length=16,
+        min_length=32,
     )
     access_token_expire_minutes: int = 120
     refresh_token_expire_days: int = 30
@@ -36,7 +37,11 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+    trusted_proxy_networks: list[str] = Field(default_factory=list)
 
+    login_failure_window_seconds: int = Field(default=300, ge=30, le=3600)
+    login_failure_per_username: int = Field(default=5, ge=1, le=100)
+    login_failure_per_ip: int = Field(default=20, ge=1, le=1000)
     audit_retention_days: int = 180
 
     @property
@@ -44,14 +49,24 @@ class Settings(BaseSettings):
         return self.app_env.lower() == "production"
 
     @model_validator(mode="after")
-    def reject_default_production_secret(self) -> "Settings":
+    def validate_security_settings(self) -> "Settings":
+        for network in self.trusted_proxy_networks:
+            try:
+                ip_network(network, strict=False)
+            except ValueError as exc:
+                raise ValueError(f"无效的可信代理网段：{network}") from exc
+
         if self.app_env.lower() != "production":
             return self
+        if self.debug:
+            raise ValueError("生产环境不得启用 DEBUG")
         weak_prefixes = ("local-", "development-", "replace-")
         if self.secret_key.startswith(weak_prefixes):
             raise ValueError("生产环境必须通过 SECRET_KEY 配置独立随机密钥")
         if self.health_info_encryption_key.startswith(weak_prefixes):
             raise ValueError("生产环境必须通过 HEALTH_INFO_ENCRYPTION_KEY 配置独立加密密钥")
+        if self.secret_key == self.health_info_encryption_key:
+            raise ValueError("JWT 签名密钥与健康信息加密密钥必须相互独立")
         return self
 
 

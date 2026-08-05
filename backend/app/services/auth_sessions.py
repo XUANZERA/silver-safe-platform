@@ -4,6 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -64,15 +65,28 @@ def rotate_refresh_token(
     token: str,
 ) -> tuple[AuthSession, User, str]:
     session_id, secret = _parse_refresh_token(token)
-    auth_session = db.get(AuthSession, session_id)
     now = datetime.now(UTC)
-    if auth_session is None:
-        raise AppError(401, "刷新令牌无效", "INVALID_REFRESH_TOKEN")
-    if auth_session.revoked_at is not None or auth_session.expires_at <= now:
-        raise AppError(401, "登录会话已失效", "SESSION_REVOKED")
-
     supplied_hash = _hash_secret(secret)
-    if not hmac.compare_digest(supplied_hash, auth_session.refresh_token_hash):
+    new_secret = secrets.token_urlsafe(48)
+    new_hash = _hash_secret(new_secret)
+    result = db.execute(
+        update(AuthSession)
+        .where(
+            AuthSession.id == session_id,
+            AuthSession.refresh_token_hash == supplied_hash,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > now,
+        )
+        .values(refresh_token_hash=new_hash, last_used_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        auth_session = db.get(AuthSession, session_id)
+        if auth_session is None:
+            raise AppError(401, "刷新令牌无效", "INVALID_REFRESH_TOKEN")
+        if auth_session.revoked_at is not None or auth_session.expires_at <= now:
+            raise AppError(401, "登录会话已失效", "SESSION_REVOKED")
         auth_session.revoked_at = now
         db.commit()
         raise AppError(
@@ -81,9 +95,10 @@ def rotate_refresh_token(
             "REFRESH_TOKEN_REUSED",
         )
 
-    new_secret = secrets.token_urlsafe(48)
-    auth_session.refresh_token_hash = _hash_secret(new_secret)
-    auth_session.last_used_at = now
+    auth_session = db.get(AuthSession, session_id)
+    if auth_session is None:
+        db.rollback()
+        raise AppError(401, "刷新令牌无效", "INVALID_REFRESH_TOKEN")
     user = db.get(User, auth_session.user_id)
     if user is None:
         auth_session.revoked_at = now
@@ -97,11 +112,10 @@ def revoke_auth_session(
     db: Session,
     *,
     token: str,
-    user_id: int,
 ) -> AuthSession:
     session_id, secret = _parse_refresh_token(token)
     auth_session = db.get(AuthSession, session_id)
-    if auth_session is None or auth_session.user_id != user_id:
+    if auth_session is None:
         raise AppError(401, "刷新令牌无效", "INVALID_REFRESH_TOKEN")
     if not hmac.compare_digest(
         _hash_secret(secret),

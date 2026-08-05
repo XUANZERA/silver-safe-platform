@@ -24,6 +24,11 @@ def verify_password(password: str, encoded_password: str) -> bool:
     return password_hash.verify(password, encoded_password)
 
 
+# Computing this once at startup makes unknown-user logins perform the same
+# expensive Argon2 verification as known-user failures.
+DUMMY_PASSWORD_HASH = hash_password("dummy-login-password-that-never-authenticates")
+
+
 def create_access_token(user_id: int, role: str, session_id: str) -> str:
     settings = get_settings()
     now = datetime.now(UTC)

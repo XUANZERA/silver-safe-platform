@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.api.dependencies import CurrentUser, DbSession
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.core.security import create_access_token, verify_password
+from app.core.security import DUMMY_PASSWORD_HASH, create_access_token, verify_password
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -19,6 +19,12 @@ from app.services.auth_sessions import (
     create_auth_session,
     revoke_auth_session,
     rotate_refresh_token,
+)
+from app.services.login_security import (
+    enforce_login_rate_limit,
+    login_attempt_guard,
+    login_subject_id,
+    record_login_failure,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +47,13 @@ def _login_response(
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
     settings = get_settings()
+    response.delete_cookie(
+        settings.refresh_cookie_name,
+        path="/",
+        httponly=True,
+        secure=settings.secure_cookies,
+        samesite="strict",
+    )
     response.set_cookie(
         key=settings.refresh_cookie_name,
         value=token,
@@ -48,7 +61,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         httponly=True,
         secure=settings.secure_cookies,
         samesite="strict",
-        path="/",
+        path=f"{settings.api_prefix}/auth",
     )
 
 
@@ -67,18 +80,25 @@ def login(
     db: DbSession,
 ) -> ApiResponse[LoginResponse]:
     ip_address = client_ip(request)
-    user = db.scalar(select(User).where(User.username == payload.username))
-    if user is None or not verify_password(payload.password, user.password_hash):
-        add_audit_log(
+    subject_id = login_subject_id(payload.username)
+    with login_attempt_guard(subject_id, ip_address):
+        enforce_login_rate_limit(
             db,
-            action="auth.login",
-            outcome="failure",
+            subject_id=subject_id,
             ip_address=ip_address,
-            details={"username": payload.username},
         )
-        db.commit()
-        logger.warning("login_failed username=%s", payload.username)
-        raise AppError(401, "用户名或密码错误", "INVALID_CREDENTIALS")
+        user = db.scalar(select(User).where(User.username == payload.username))
+        password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+        password_matches = verify_password(payload.password, password_hash)
+        if user is None or not password_matches:
+            record_login_failure(
+                db,
+                subject_id=subject_id,
+                ip_address=ip_address,
+            )
+            db.commit()
+            logger.warning("login_failed subject_id=%s", subject_id)
+            raise AppError(401, "用户名或密码错误", "INVALID_CREDENTIALS")
 
     auth_session, refresh_token = create_auth_session(db, user)
     add_audit_log(
@@ -155,28 +175,44 @@ def logout(
     request: Request,
     response: Response,
     db: DbSession,
-    current_user: CurrentUser,
 ) -> ApiResponse[None]:
-    auth_session = revoke_auth_session(
-        db,
-        token=_get_refresh_cookie(request),
-        user_id=current_user.id,
-    )
+    settings = get_settings()
+    token = request.cookies.get(settings.refresh_cookie_name)
+    auth_session = None
+    outcome = "no_token"
+    error_code = None
+    if token:
+        try:
+            auth_session = revoke_auth_session(db, token=token)
+            outcome = "success"
+        except AppError as exc:
+            db.rollback()
+            outcome = "invalid_token"
+            error_code = exc.error_code
+
     add_audit_log(
         db,
         action="auth.logout",
-        outcome="success",
-        actor_user_id=current_user.id,
-        resource_type="auth_session",
-        resource_id=auth_session.id,
+        outcome=outcome,
+        actor_user_id=auth_session.user_id if auth_session else None,
+        resource_type="auth_session" if auth_session else None,
+        resource_id=auth_session.id if auth_session else None,
         ip_address=client_ip(request),
+        details={"error_code": error_code} if error_code else None,
     )
     db.commit()
     response.delete_cookie(
-        get_settings().refresh_cookie_name,
+        settings.refresh_cookie_name,
+        path=f"{settings.api_prefix}/auth",
+        httponly=True,
+        secure=settings.secure_cookies,
+        samesite="strict",
+    )
+    response.delete_cookie(
+        settings.refresh_cookie_name,
         path="/",
         httponly=True,
-        secure=get_settings().secure_cookies,
+        secure=settings.secure_cookies,
         samesite="strict",
     )
     return ApiResponse(data=None, message="已安全退出")
