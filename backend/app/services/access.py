@@ -6,6 +6,16 @@ from app.models.elder import Elder, ElderFamilyBinding
 from app.models.user import User
 
 
+def get_owned_elder(db: Session, user: User) -> Elder:
+    if user.role != "elder":
+        raise AppError(403, "只有老人账号可以执行此操作", "ELDER_ROLE_REQUIRED")
+
+    elder = db.scalar(select(Elder).where(Elder.user_id == user.id))
+    if elder is None:
+        raise AppError(404, "当前账号没有对应的老人资料", "ELDER_NOT_FOUND")
+    return elder
+
+
 def ensure_elder_access(db: Session, user: User, elder_id: int) -> Elder:
     elder = db.get(Elder, elder_id)
     if elder is None:

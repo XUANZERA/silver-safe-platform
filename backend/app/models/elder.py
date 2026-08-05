@@ -7,6 +7,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.geofence import Geofence
+    from app.models.trip import Trip
     from app.models.user import User
 
 
@@ -30,6 +31,10 @@ class Elder(Base):
     geofence: Mapped["Geofence | None"] = relationship(
         back_populates="elder",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+    trips: Mapped[list["Trip"]] = relationship(
+        back_populates="elder",
         cascade="all, delete-orphan",
     )
 

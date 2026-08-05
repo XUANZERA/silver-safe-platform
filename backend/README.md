@@ -12,6 +12,12 @@
 | GET | `/elders` | 按当前角色列出可访问的老人资料 |
 | GET | `/elders/{elder_id}` | 获取老人详情 |
 | GET | `/elders/{elder_id}/geofence` | 获取老人的圆形安全围栏 |
+| POST | `/trips` | 创建出游任务 |
+| GET | `/trips/{trip_id}` | 获取出游任务 |
+| POST | `/trips/{trip_id}/start` | 开始出游 |
+| POST | `/trips/{trip_id}/end` | 结束出游 |
+| POST | `/trips/{trip_id}/cancel` | 取消尚未开始的出游 |
+| GET | `/elders/{elder_id}/current-trip` | 获取老人当前未完成的出游 |
 
 完整请求和响应示例见 [`docs/auth-api.md`](../docs/auth-api.md)。
 
@@ -98,3 +104,7 @@ python -m ruff format --check backend
 `SECRET_KEY` 和 `HEALTH_INFO_ENCRYPTION_KEY`，并通过 HTTPS 部署以启用
 安全 Cookie。健康信息在数据库中加密保存；老人及其绑定家属可读取，运营人员默认仅能
 查看脱敏结果。
+
+接口时间字段统一使用 snake_case，例如 `created_at`、`started_at` 和
+`ended_at`。后端以 UTC 存储并返回 RFC 3339 格式（例如
+`2026-08-05T02:00:00Z`）；前端仅在展示时转换为用户所在时区。
