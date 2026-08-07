@@ -4,5 +4,5 @@ import MapCanvas from "./components/map/MapCanvas.vue"
 
 
 <template>
-<MapCanvas/>
+  <router-view />
 </template>
