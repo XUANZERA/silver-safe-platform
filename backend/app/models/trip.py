@@ -8,7 +8,9 @@ from app.db.base import Base
 from app.models.types import UTCDateTime, utc_now
 
 if TYPE_CHECKING:
+    from app.models.alert import Alert
     from app.models.elder import Elder
+    from app.models.location import Location
 
 
 class Trip(Base):
@@ -55,3 +57,8 @@ class Trip(Base):
     cancel_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     elder: Mapped["Elder"] = relationship(back_populates="trips")
+    locations: Mapped[list["Location"]] = relationship(
+        back_populates="trip",
+        cascade="all, delete-orphan",
+    )
+    alerts: Mapped[list["Alert"]] = relationship(back_populates="trip")

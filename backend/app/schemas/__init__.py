@@ -8,6 +8,11 @@ from app.schemas.auth import (
 )
 from app.schemas.common import ApiResponse
 from app.schemas.elder import ElderListResponse, ElderResponse, GeofenceResponse
+from app.schemas.location import (
+    LocationCreateRequest,
+    LocationResponse,
+    LocationSource,
+)
 from app.schemas.trip import TripCancelRequest, TripCreateRequest, TripResponse, TripStatus
 
 __all__ = [
@@ -17,6 +22,9 @@ __all__ = [
     "GeofenceResponse",
     "LoginRequest",
     "LoginResponse",
+    "LocationCreateRequest",
+    "LocationResponse",
+    "LocationSource",
     "TripCancelRequest",
     "TripCreateRequest",
     "TripResponse",

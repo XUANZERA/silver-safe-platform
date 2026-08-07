@@ -79,9 +79,10 @@ def seed_demo_data(session: Session) -> None:
         session.add(
             Geofence(
                 elder_id=elder.id,
-                center_latitude=31.230391,
-                center_longitude=121.473701,
-                radius_meters=500,
+                # Keep demo data aligned with A's GCJ-02 map simulator.
+                center_latitude=23.1291,
+                center_longitude=113.2644,
+                radius_meters=300,
                 enabled=True,
             )
         )

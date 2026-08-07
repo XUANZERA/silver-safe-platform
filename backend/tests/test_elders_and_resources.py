@@ -32,7 +32,9 @@ def test_role_scoped_elder_queries_and_geofence(client: TestClient) -> None:
     assert detail.status_code == 200
     assert detail.json()["data"]["health_info"] == "轻度高血压"
     assert geofence.status_code == 200
-    assert geofence.json()["data"]["radius_meters"] == 500
+    assert geofence.json()["data"]["radius_meters"] == 300
+    assert geofence.json()["data"]["center_latitude"] == 23.1291
+    assert geofence.json()["data"]["center_longitude"] == 113.2644
     assert "id" not in geofence.json()["data"]
 
 

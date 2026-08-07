@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     login_failure_window_seconds: int = Field(default=300, ge=30, le=3600)
     login_failure_per_username: int = Field(default=5, ge=1, le=100)
     login_failure_per_ip: int = Field(default=20, ge=1, le=1000)
+    location_upload_window_seconds: int = Field(default=60, ge=10, le=3600)
+    location_upload_per_trip: int = Field(default=120, ge=1, le=10000)
+    location_clock_skew_seconds: int = Field(default=300, ge=0, le=3600)
+    geofence_trigger_count: int = Field(default=3, ge=2, le=10)
+    geofence_max_accuracy_meters: float = Field(default=100, gt=0, le=1000)
+    geofence_alert_cooldown_minutes: int = Field(default=10, ge=1, le=1440)
+    location_read_audit_window_seconds: int = Field(default=60, ge=10, le=3600)
     audit_retention_days: int = 180
 
     @property
