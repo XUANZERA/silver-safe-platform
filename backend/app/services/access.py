@@ -46,3 +46,8 @@ def list_accessible_elders(db: Session, user: User) -> list[Elder]:
     elif user.role != "operator":
         return []
     return list(db.scalars(query).all())
+
+
+def require_operator(user: User) -> None:
+    if user.role != "operator":
+        raise AppError(403, "只有运营人员可以执行此操作", "OPERATOR_REQUIRED")

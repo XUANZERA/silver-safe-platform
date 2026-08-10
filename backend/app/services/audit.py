@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.errors import AppError
 from app.models.security import AuditLog
 
 
@@ -82,3 +83,56 @@ def count_recent_audit_events(
     if resource_id is not None:
         filters.append(AuditLog.resource_id == resource_id)
     return db.scalar(select(func.count(AuditLog.id)).where(*filters)) or 0
+
+
+def begin_sos_audit(
+    db: Session,
+    *,
+    actor_user_id: int,
+    ip_address: str | None,
+) -> AuditLog:
+    """Create and rate-check one SOS attempt inside the caller's lock."""
+    settings = get_settings()
+    log = add_audit_log(
+        db,
+        action="sos.request",
+        outcome="pending",
+        actor_user_id=actor_user_id,
+        ip_address=ip_address,
+    )
+    db.flush()
+
+    user_count = count_recent_audit_events(
+        db,
+        action="sos.request",
+        window_seconds=settings.sos_rate_limit_window_seconds,
+        actor_user_id=actor_user_id,
+    )
+    ip_count = (
+        count_recent_audit_events(
+            db,
+            action="sos.request",
+            window_seconds=settings.sos_rate_limit_window_seconds,
+            ip_address=ip_address,
+        )
+        if ip_address
+        else 0
+    )
+    if user_count > settings.sos_rate_limit_per_user or ip_count > settings.sos_rate_limit_per_ip:
+        log.outcome = "blocked"
+        log.details = json.dumps(
+            {
+                "user_count": user_count,
+                "ip_count": ip_count,
+                "window_seconds": settings.sos_rate_limit_window_seconds,
+            },
+            separators=(",", ":"),
+        )
+        db.commit()
+        raise AppError(
+            429,
+            "SOS 请求过于频繁，请稍后再试",
+            "SOS_RATE_LIMITED",
+            headers={"Retry-After": str(settings.sos_rate_limit_window_seconds)},
+        )
+    return log
