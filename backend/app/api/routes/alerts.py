@@ -28,7 +28,7 @@ from app.services.alerts import (
     get_alert_or_404,
     resolve_alert,
 )
-from app.services.audit import add_audit_log, client_ip, count_recent_audit_events
+from app.services.audit import add_audit_log, client_ip, has_recent_audit_event
 from app.services.sos import request_sos
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ def _audit_alert_read(
 ) -> None:
     settings = get_settings()
     resource_key = str(resource_id)
-    recent = count_recent_audit_events(
+    recently_recorded = has_recent_audit_event(
         db,
         action=action,
         outcome="success",
@@ -55,7 +55,7 @@ def _audit_alert_read(
         resource_id=resource_key,
         window_seconds=settings.alert_read_audit_window_seconds,
     )
-    if recent == 0:
+    if not recently_recorded:
         add_audit_log(
             db,
             action=action,

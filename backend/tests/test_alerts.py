@@ -256,11 +256,24 @@ def test_alert_indexes_support_dashboard_queries() -> None:
                 "ORDER BY occurred_at DESC LIMIT 20"
             )
         ).all()
+        audit_plan = connection.execute(
+            text(
+                "EXPLAIN QUERY PLAN SELECT id FROM audit_logs "
+                "WHERE actor_user_id = 1 AND action = 'alert.list.read' "
+                "AND outcome = 'success' AND resource_type = 'elder' "
+                "AND resource_id = '1' AND occurred_at >= '2026-01-01' LIMIT 1"
+            )
+        ).all()
 
     status_text = " ".join(str(column) for row in status_plan for column in row)
     typed_text = " ".join(str(column) for row in typed_plan for column in row)
+    audit_text = " ".join(str(column) for row in audit_plan for column in row)
     assert "ix_alerts_status_occurred" in status_text
     assert "ix_alerts_status_type_occurred" in typed_text
+    assert "USING INDEX" in audit_text
+    assert any(
+        name in audit_text for name in ("ix_audit_actor_action_time", "ix_audit_resource_time")
+    )
 
 
 def test_alert_logs_contain_only_real_state_changes(client: TestClient) -> None:

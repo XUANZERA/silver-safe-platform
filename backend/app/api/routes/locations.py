@@ -18,7 +18,7 @@ from app.schemas.location import (
     TrackResponse,
 )
 from app.services.access import ensure_elder_access, get_owned_elder
-from app.services.audit import add_audit_log, client_ip, count_recent_audit_events
+from app.services.audit import add_audit_log, client_ip, has_recent_audit_event
 from app.services.locations import (
     get_latest_trip_location,
     list_trip_locations,
@@ -44,7 +44,7 @@ def _audit_location_read(
     action: str,
 ) -> None:
     settings = get_settings()
-    recently_recorded = count_recent_audit_events(
+    recently_recorded = has_recent_audit_event(
         db,
         action=action,
         outcome="success",
@@ -53,7 +53,7 @@ def _audit_location_read(
         resource_id=str(trip_id),
         window_seconds=settings.location_read_audit_window_seconds,
     )
-    if recently_recorded == 0:
+    if not recently_recorded:
         add_audit_log(
             db,
             action=action,
