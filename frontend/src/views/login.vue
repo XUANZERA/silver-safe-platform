@@ -1,5 +1,5 @@
 <!-- eslint-disable unused-imports/no-unused-vars -->
-<script setup lang="ts">
+<script setup>
 import { Toast } from 'vant'
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -55,7 +55,12 @@ const onSubmit = async () => {
 function goToRegister() {
   // 如果有注册页面的话
   // router.push('/register')
-  showToast('注册功能开发中...')
+  Toast('注册功能开发中...')
+}
+
+// 忘记密码
+function goToForgotPassword() {
+  Toast('忘记密码功能开发中...')
 }
 </script>
 
@@ -65,7 +70,7 @@ function goToRegister() {
     <div class="login-card">
       <!-- Logo 或标题 -->
       <div class="login-header">
-        <h1 class="text-3xl font-bold text-center text-blue-600">银发独游</h1>
+        <h1 class="login-title">银发独游</h1>
       </div>
 
       <!-- 登录表单 -->
@@ -89,7 +94,7 @@ function goToRegister() {
             label="密码"
             placeholder="请输入密码"
             :rules="[{ required: true, message: '请填写密码' }]"
-            left-icon="lock-o"
+            left-icon="lock"
             clearable
           />
         </van-cell-group>
@@ -110,11 +115,14 @@ function goToRegister() {
           </van-button>
         </div>
 
-        <!-- 额外操作 -->
-        <div class="flex justify-between px-4 mt-4 text-sm">
+                <!-- 底部操作栏：记住我 | 注册账号 | 忘记密码 -->
+        <div class="bottom-actions">
           <van-checkbox v-model="rememberMe">记住我</van-checkbox>
-          <span class="text-blue-500 cursor-pointer" @click="goToRegister">
+          <span class="register-btn" @click="goToRegister">
             注册账号
+          </span>
+          <span class="forgot-password-btn" @click="goToForgotPassword">
+            忘记密码？
           </span>
         </div>
       </van-form>
@@ -130,6 +138,12 @@ function goToRegister() {
   justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
+  margin: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .login-card {
@@ -145,6 +159,14 @@ function goToRegister() {
   margin-bottom: 30px;
 }
 
+.login-title {
+  font-size: 30px;
+  font-weight: 900;
+  text-align: center;
+  color: #323233;
+  margin: 0;
+}
+
 .login-btn {
   height: 50px;
   font-size: 16px;
@@ -156,6 +178,35 @@ function goToRegister() {
   transform: scale(0.98);
 }
 
+.bottom-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 16px 0 16px;
+}
+
+.register-btn {
+  color: #1989fa;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.register-btn:hover {
+  color: #1677d6;
+}
+
+.forgot-password-btn {
+  color: #1989fa;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.forgot-password-btn:hover {
+  color: #1677d6;
+}
+
 /* 移动端优化 */
 :deep(.van-field) {
   padding: 10px 0;
@@ -163,5 +214,15 @@ function goToRegister() {
 
 :deep(.van-field__label) {
   width: 70px;
+}
+
+/* 覆盖 Vant 默认的 checkbox 颜色，让它更协调 */
+:deep(.van-checkbox__icon .van-icon) {
+  border-color: #667eea;
+}
+
+:deep(.van-checkbox__icon--checked .van-icon) {
+  background-color: #667eea;
+  border-color: #667eea;
 }
 </style>
