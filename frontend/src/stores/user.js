@@ -8,14 +8,18 @@ export const useUserStore = defineStore('user', () => {
   const setUserInfo = (info) => {
     userInfo.value = info
     isLoggedIn.value = true
-    localStorage.setItem('userInfo', JSON.stringify(info))
+    sessionStorage.setItem('userInfo', JSON.stringify(info))
   }
 
   const getUserInfo = () => {
-    const info = localStorage.getItem('userInfo')
+    const info = sessionStorage.getItem('userInfo')
     if (info) {
-      userInfo.value = JSON.parse(info)
-      isLoggedIn.value = true
+      try {
+        userInfo.value = JSON.parse(info)
+        isLoggedIn.value = true
+      } catch {
+        sessionStorage.removeItem('userInfo')
+      }
     }
     return userInfo.value
   }
@@ -23,7 +27,7 @@ export const useUserStore = defineStore('user', () => {
   const logout = () => {
     userInfo.value = {}
     isLoggedIn.value = false
-    localStorage.removeItem('userInfo')
+    sessionStorage.removeItem('userInfo')
   }
 
   getUserInfo()

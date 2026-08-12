@@ -8,7 +8,7 @@ defineOptions({
 const router = useRouter()
 
 function goHome() {
-  router.push({ name: 'Demo' })
+  router.push('/')
 }
 </script>
 

@@ -1,0 +1,35 @@
+<script setup>
+import { computed, ref } from 'vue'
+import { showConfirmDialog, showSuccessToast } from 'vant'
+const props = defineProps({ trips: { type: Array, required: true } })
+const emit = defineEmits(['back', 'ended'])
+const filter = ref('全部')
+const selected = ref(null)
+const locationTrip = ref(null)
+const visibleTrips = computed(() => filter.value === '全部' ? props.trips : props.trips.filter((trip) => trip.status === filter.value))
+async function endTrip(trip) {
+  try { await showConfirmDialog({ title: '结束行程', message: `确认将 ${trip.elderName} 的本次出游标记为结束？` }); trip.status='已完成'; trip.state='已结束'; emit('ended', trip.elderName); selected.value=null; showSuccessToast('行程已结束') } catch { /* 用户取消 */ }
+}
+
+function showLocation(trip) {
+  locationTrip.value = trip
+}
+</script>
+
+<template>
+  <section class="module-page">
+    <header class="module-header"><button type="button" @click="emit('back')"><van-icon name="arrow-left" /></button><div><h1>出游管理</h1><p>查看当前行程与安全状态</p></div></header>
+    <div class="filter-tabs"><button v-for="item in ['全部','进行中','已完成']" :key="item" :class="{ active: filter === item }" type="button" @click="filter=item">{{ item }}</button></div>
+    <div class="trip-list">
+      <article v-for="trip in visibleTrips" :key="trip.id" class="trip-card" @click="selected=trip"><div class="trip-head"><span class="avatar">{{ trip.elderName.slice(-1) }}</span><div><strong>{{ trip.elderName }}</strong><p>行程编号 #{{ trip.id }}</p></div><em :class="{ attention: trip.state === '需关注', danger: trip.state === '告警中' }">{{ trip.state }}</em></div><div class="route"><span class="route-dot"></span><div><small>目的地</small><strong>{{ trip.destination }}</strong></div></div><div class="trip-meta"><span>{{ trip.startedAt }} 出发</span><span>{{ trip.duration }}</span><span>{{ trip.status }}</span></div></article>
+    </div>
+    <van-popup v-model:show="selected" position="bottom" round :style="{ padding: '22px 18px 30px' }"><div v-if="selected" class="detail-sheet"><h2>{{ selected.elderName }}的出游</h2><p class="destination"><van-icon name="location-o"/>{{ selected.destination }}</p><van-cell-group inset><van-cell title="当前状态" :value="selected.state"/><van-cell title="出发时间" :value="selected.startedAt"/><van-cell title="持续时间" :value="selected.duration"/><van-cell title="紧急联系人" :label="selected.contact"/></van-cell-group><div class="sheet-actions"><van-button round block plain type="primary" @click="showLocation(selected)">查看位置</van-button><van-button v-if="selected.status==='进行中'" round block type="primary" @click="endTrip(selected)">结束行程</van-button></div></div></van-popup>
+    <van-popup v-model:show="locationTrip" position="bottom" round :style="{ padding: '22px 18px 30px' }"><div v-if="locationTrip" class="location-sheet"><h2>当前位置概览</h2><p>{{ locationTrip.elderName }} · 更新于刚刚</p><div class="simple-map"><span class="road road-a"></span><span class="road road-b"></span><span class="fence"></span><span class="map-pin"><van-icon name="location" /></span><em>{{ locationTrip.destination }}附近</em></div><div :class="['location-status', { warning: locationTrip.state !== '正常' && locationTrip.state !== '已结束' }]"><span></span>{{ locationTrip.state === '正常' ? '定位在线，位于安全区域内' : locationTrip.state === '已结束' ? '本次行程已结束' : `定位在线，当前状态：${locationTrip.state}` }}</div><p class="map-note">演示仅展示位置概览，不包含路线规划或轨迹纠偏</p></div></van-popup>
+  </section>
+</template>
+
+<style scoped>
+.module-page{min-height:calc(100vh - 62px);background:#f5f5f5}.module-header{display:flex;align-items:center;gap:12px;padding:20px 16px 18px;color:white;background:linear-gradient(135deg,#667eea,#764ba2)}.module-header button{width:34px;height:34px;color:white;border:0;border-radius:50%;background:rgba(255,255,255,.15)}.module-header h1{margin:0;color:white;font-size:20px;font-weight:700}.module-header p{color:rgba(255,255,255,.75);font-size:11px}.filter-tabs{display:flex;gap:8px;padding:12px 14px;background:white}.filter-tabs button{padding:6px 17px;color:#646566;border:0;border-radius:16px;background:#f2f3f5;font-size:11px}.filter-tabs button.active{color:white;background:#667eea}.trip-list{display:grid;gap:10px;max-width:760px;margin:auto;padding:12px 14px}.trip-card{padding:14px;border-radius:10px;background:white}.trip-head{display:flex;align-items:center;gap:10px}.avatar{width:38px;height:38px;display:grid;place-items:center;color:#6657a5;border-radius:50%;background:#efecfa;font-size:13px;font-weight:700}.trip-head>div{flex:1}.trip-head strong{font-size:13px}.trip-head p{color:#969799;font-size:9px}.trip-head em{padding:4px 7px;color:#3c9b6a;border-radius:9px;background:#eaf8f1;font-size:9px;font-style:normal}.trip-head em.attention{color:#d78335;background:#fff3e2}.trip-head em.danger{color:#e25e66;background:#fff0f1}.route{display:flex;align-items:center;gap:10px;margin:13px 0;padding:10px;border-radius:8px;background:#f7f6fa}.route-dot{width:8px;height:8px;border-radius:50%;background:#667eea;box-shadow:0 0 0 4px #e8eafa}.route small,.route strong{display:block}.route small{color:#969799;font-size:9px}.route strong{font-size:11px}.trip-meta{display:flex;justify-content:space-between;color:#969799;font-size:10px}.detail-sheet h2{margin:0;color:#323233;font-size:18px}.destination{margin:5px 0 16px;color:#646566;font-size:11px}.detail-sheet :deep(.van-cell-group--inset){margin:0}.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px}.sheet-actions :deep(.van-button--primary){background:#667eea;border-color:#667eea}.sheet-actions :deep(.van-button--plain){color:#667eea;background:white}
+.location-sheet h2{margin:0;color:#323233;font-size:18px}.location-sheet>p{margin:4px 0 14px;color:#969799;font-size:11px}.simple-map{position:relative;height:210px;overflow:hidden;border-radius:12px;background:linear-gradient(135deg,#edf2ea,#e7edf2)}.road{position:absolute;background:rgba(255,255,255,.9);box-shadow:0 0 0 1px #dfe5e5}.road-a{width:130%;height:22px;left:-15%;top:85px;transform:rotate(-15deg)}.road-b{width:22px;height:130%;left:58%;top:-15%;transform:rotate(18deg)}.fence{position:absolute;width:100px;height:100px;left:50%;top:50%;border:2px solid rgba(102,126,234,.55);border-radius:50%;background:rgba(102,126,234,.1);transform:translate(-50%,-50%)}.map-pin{position:absolute;left:50%;top:47%;z-index:2;width:30px;height:30px;display:grid;place-items:center;color:white;border:3px solid white;border-radius:50%;background:#667eea;box-shadow:0 3px 10px rgba(67,65,125,.35);transform:translate(-50%,-50%)}.simple-map em{position:absolute;left:50%;top:66%;padding:4px 8px;color:#4f4669;border-radius:9px;background:rgba(255,255,255,.9);font-size:9px;font-style:normal;transform:translateX(-50%)}.location-status{display:flex;align-items:center;gap:7px;margin-top:12px;color:#3d9168;font-size:11px}.location-status span{width:7px;height:7px;border-radius:50%;background:#50b47f}.map-note{margin-top:6px!important;color:#b0aab4!important;text-align:center;font-size:9px!important}
+.location-status.warning{color:#d78335}.location-status.warning span{background:#e79a49}
+</style>
