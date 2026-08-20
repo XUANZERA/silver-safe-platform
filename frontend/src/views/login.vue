@@ -163,7 +163,7 @@ function goToForgotPassword() {
   font-size: 30px;
   font-weight: 900;
   text-align: center;
-  color: #323233;
+  color: #000000;
   margin: 0;
 }
 
