@@ -48,19 +48,39 @@
 
 <script setup>
 // 预留你的业务逻辑和数据绑定位置
+import { onMounted, ref } from 'vue'
 import { showDialog } from 'vant'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
+import { elderApi, isApiConfigured } from '../../services/api'
 const router = useRouter()
 const userStore = useUserStore()
 const homePath = userStore.userInfo.role === 'family' ? '/child' : '/elder'
 const profilePath = userStore.userInfo.role === 'family' ? '/child/profile' : '/elder/profile'
+const destination = ref('天坛公园慢游')
 
 const itinerary = [
   { time: '08:30', title: '集合出发', transport: '🚗 专车直达（约30分钟）', description: '服务人员到家接送，确认随身物品后前往天坛公园。', tips: [{ text: '🛋️ 专人陪同', type: 'safe' }, { text: '📞 家人可查看位置', type: 'safe' }] },
   { time: '09:00', title: '天坛公园慢游', transport: '🚶 平缓步道', description: '沿平整步道游览祈年殿，园区路况平缓，空气极佳。', tips: [{ text: '🛋️ 沿途有休息区', type: 'safe' }, { text: '🚶‍♂️ 全程平缓步道', type: 'safe' }, { text: '⚠️ 每小时休息15分钟', type: 'warning' }] },
   { time: '15:30', title: '返程回家', transport: '🚗 专车送回', description: '结束游览后由原车送回家，抵达后通知家人。', tips: [{ text: '✅ 已安排返程', type: 'safe' }, { text: '📞 抵达自动提醒', type: 'safe' }] }
 ]
+
+onMounted(async () => {
+  if (!isApiConfigured()) return
+  try {
+    const elders = await elderApi.list()
+    const elder = elders?.items?.[0]
+    if (!elder) return
+    const trip = await elderApi.currentTrip(elder.id)
+    if (trip?.destination) {
+      destination.value = trip.destination
+      itinerary[1].title = trip.destination
+      itinerary[1].description = `沿平整步道游览${trip.destination}，园区路况平缓，途中可随时休息。`
+    }
+  } catch (error) {
+    console.warn('行程单同步失败，使用演示安排', error)
+  }
+})
 
 const showEmergencyInfo = () => {
   // 这里可以触发弹窗、抽屉或跳转，展示紧急联系人、随身药品、附近医院等信息
