@@ -31,7 +31,7 @@ p { margin: 0; }
 
 /* 登录后的页面统一使用同一高度的品牌/标题栏。 */
 :where(.elder-header, .child-header, .operator-header, .elderly-schedule-container > .app-header, .operator-page > .app-header, .profile-page > header) {
-  width: 100%;
+  width: auto;
   height: var(--app-header-height) !important;
   min-height: var(--app-header-height) !important;
   padding: 14px 18px !important;
