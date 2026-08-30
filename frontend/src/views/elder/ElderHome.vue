@@ -18,7 +18,16 @@ const currentTripId = ref(null)
 const elder = reactive({ id: 1001, name: '张建国', age: 72, family: '张小明', familyPhone: '138****2256', destination: '天坛公园慢游', lastUpdate: '刚刚' })
 const isTripActive = computed(() => tripStatus.value === '出游中')
 
+function applySavedItinerary() {
+  try {
+    const items = JSON.parse(sessionStorage.getItem('helpingold-itinerary') || '[]')
+    const destinationItem = items[1] || items[0]
+    if (destinationItem?.title) elder.destination = destinationItem.title
+  } catch { sessionStorage.removeItem('helpingold-itinerary') }
+}
+
 onMounted(async () => {
+  applySavedItinerary()
   if (!isApiConfigured()) return
   try {
     const list = await elderApi.list()
@@ -40,6 +49,7 @@ onMounted(async () => {
       // FIX END: 用后端返回的行程 ID 和状态初始化页面。
     }
   } catch (error) { console.warn('老人端数据加载失败，使用演示数据', error) }
+  applySavedItinerary()
 })
 
 // FIX START: 开始/结束行程时调用真实 API，并始终传递 trip.id。

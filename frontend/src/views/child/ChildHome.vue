@@ -6,7 +6,15 @@ import { elderApi, isApiConfigured, locationApi } from '../../services/api'
 const router = useRouter()
 const activeAlert = ref(false)
 const elder = reactive({ id: 1001, tripId: null, name: '张建国', status: '出游中', location: '天坛公园东门附近', update: '刚刚', family: '张小明', phone: '138****2256', destination: '天坛公园慢游' })
+function applySavedItinerary() {
+  try {
+    const items = JSON.parse(sessionStorage.getItem('helpingold-itinerary') || '[]')
+    const destinationItem = items[1] || items[0]
+    if (destinationItem?.title) elder.destination = destinationItem.title
+  } catch { sessionStorage.removeItem('helpingold-itinerary') }
+}
 onMounted(async () => {
+  applySavedItinerary()
   if (!isApiConfigured()) return
   try {
     const list = await elderApi.list()
@@ -19,6 +27,7 @@ onMounted(async () => {
       if (latest?.location) Object.assign(elder, { location: `${latest.location.latitude.toFixed(5)}, ${latest.location.longitude.toFixed(5)}`, update: new Date(latest.location.recorded_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     }
   } catch (error) { console.warn('子女端数据加载失败，使用演示数据', error) }
+  applySavedItinerary()
 })
 // FIX START: 家属端只能读取老人后端定位，不能用家属设备定位覆盖老人位置。
 async function refresh() {

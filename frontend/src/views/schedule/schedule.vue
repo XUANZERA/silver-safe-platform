@@ -5,38 +5,42 @@
     <header class="schedule-header">
       <button class="back-button" type="button" @click="router.push(homePath)"><van-icon name="arrow-left" /></button>
       <h1 class="schedule-title">旅游行程单</h1>
+      <button class="edit-button" type="button" @click="editing ? cancelEdit() : startEdit()">{{ editing ? '取消' : '编辑' }}</button>
     </header>
 
     <!-- 适老化时间轴区域 -->
     <div class="timeline-wrapper">
       <!-- 这里可以使用 v-for 循环渲染你的行程数据 -->
-      <div class="timeline-item" v-for="item in itinerary" :key="item.time">
+      <div class="timeline-item" v-for="(item, index) in itinerary" :key="`${item.time}-${index}`">
         <!-- 左侧时间轴节点 -->
         <div class="timeline-node">
-          <span class="node-time">{{ item.time }}</span>
+          <span v-if="!editing" class="node-time">{{ item.time }}</span>
+          <input v-else v-model="item.time" class="time-input" aria-label="行程时间" />
           <div class="node-line"></div>
         </div>
 
         <!-- 右侧行程卡片 -->
         <div class="timeline-card">
           <!-- 标题与交通方式 -->
-          <div class="card-header">
+          <div v-if="!editing" class="card-header">
             <h2 class="project-title">{{ item.title }}</h2>
             <span class="transport-tag">{{ item.transport }}</span>
           </div>
+          <div v-else class="edit-fields"><input v-model="item.title" placeholder="行程名称"/><input v-model="item.transport" placeholder="交通方式"/><textarea v-model="item.description" rows="3" placeholder="行程说明"></textarea><button type="button" @click="removeItem(index)"><van-icon name="delete-o" /> 删除此项</button></div>
 
           <!-- 行程描述 -->
-          <p class="project-desc">
+          <p v-if="!editing" class="project-desc">
             {{ item.description }}
           </p>
 
           <!-- 适老化专属提示 -->
-          <div class="elderly-tips">
+          <div v-if="!editing" class="elderly-tips">
             <span v-for="tip in item.tips" :key="tip.text" class="tip-tag" :class="tip.type">{{ tip.text }}</span>
           </div>
         </div>
       </div>
     </div>
+    <div v-if="editing" class="edit-actions"><button type="button" @click="addItem"><van-icon name="plus" /> 新增行程</button><button class="save" type="button" @click="saveEdit">保存行程</button></div>
 
     <!-- 右下角悬浮应急按钮 -->
     <button class="emergency-fab" type="button" @click="showEmergencyInfo">
@@ -48,8 +52,8 @@
 
 <script setup>
 // 预留你的业务逻辑和数据绑定位置
-import { onMounted, ref } from 'vue'
-import { showDialog } from 'vant'
+import { onMounted, reactive, ref } from 'vue'
+import { showDialog, showSuccessToast } from 'vant'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { elderApi, isApiConfigured } from '../../services/api'
@@ -58,24 +62,59 @@ const userStore = useUserStore()
 const homePath = userStore.userInfo.role === 'family' ? '/child' : '/elder'
 const profilePath = userStore.userInfo.role === 'family' ? '/child/profile' : '/elder/profile'
 const destination = ref('天坛公园慢游')
+const editing = ref(false)
+let editSnapshot = ''
+let hasSavedItinerary = false
 
-const itinerary = [
+const itinerary = reactive([
   { time: '08:30', title: '集合出发', transport: '🚗 专车直达（约30分钟）', description: '服务人员到家接送，确认随身物品后前往天坛公园。', tips: [{ text: '🛋️ 专人陪同', type: 'safe' }, { text: '📞 家人可查看位置', type: 'safe' }] },
   { time: '09:00', title: '天坛公园慢游', transport: '🚶 平缓步道', description: '沿平整步道游览祈年殿，园区路况平缓，空气极佳。', tips: [{ text: '🛋️ 沿途有休息区', type: 'safe' }, { text: '🚶‍♂️ 全程平缓步道', type: 'safe' }, { text: '⚠️ 每小时休息15分钟', type: 'warning' }] },
   { time: '15:30', title: '返程回家', transport: '🚗 专车送回', description: '结束游览后由原车送回家，抵达后通知家人。', tips: [{ text: '✅ 已安排返程', type: 'safe' }, { text: '📞 抵达自动提醒', type: 'safe' }] }
-]
+])
+
+function startEdit() {
+  editSnapshot = JSON.stringify(itinerary)
+  editing.value = true
+}
+
+function cancelEdit() {
+  itinerary.splice(0, itinerary.length, ...JSON.parse(editSnapshot || '[]'))
+  editing.value = false
+}
+
+function addItem() {
+  itinerary.push({ time: '10:00', title: '新的安排', transport: '步行', description: '请填写行程说明。', tips: [{ text: '家人可查看', type: 'safe' }] })
+}
+
+function removeItem(index) {
+  if (itinerary.length === 1) return showDialog({ title: '至少保留一项', message: '行程单中需要保留至少一个安排。' })
+  itinerary.splice(index, 1)
+}
+
+function saveEdit() {
+  const invalid = itinerary.some((item) => !item.time.trim() || !item.title.trim())
+  if (invalid) return showDialog({ title: '请补充信息', message: '每项行程都需要填写时间和名称。' })
+  sessionStorage.setItem('helpingold-itinerary', JSON.stringify(itinerary))
+  editing.value = false
+  showSuccessToast('行程已保存并同步展示')
+}
 
 onMounted(async () => {
+  const saved = sessionStorage.getItem('helpingold-itinerary')
+  if (saved) {
+    try { itinerary.splice(0, itinerary.length, ...JSON.parse(saved)); hasSavedItinerary = true } catch { sessionStorage.removeItem('helpingold-itinerary') }
+  }
   if (!isApiConfigured()) return
   try {
     const elders = await elderApi.list()
     const elder = elders?.items?.[0]
     if (!elder) return
     const trip = await elderApi.currentTrip(elder.id)
-    if (trip?.destination) {
+    if (trip?.destination && !hasSavedItinerary) {
       destination.value = trip.destination
-      itinerary[1].title = trip.destination
-      itinerary[1].description = `沿平整步道游览${trip.destination}，园区路况平缓，途中可随时休息。`
+      const destinationItem = itinerary[1] || itinerary[0]
+      destinationItem.title = trip.destination
+      destinationItem.description = `沿平整步道游览${trip.destination}，园区路况平缓，途中可随时休息。`
     }
   } catch (error) {
     console.warn('行程单同步失败，使用演示安排', error)
@@ -239,4 +278,7 @@ const showEmergencyInfo = () => {
 </style>
 <style scoped>
 .app-header .brand span{color:transparent;background:#fff url('/src/assets/logo.png') center/contain no-repeat}
+</style>
+<style scoped>
+.edit-button{position:absolute;right:0;top:5px;padding:7px 10px;color:#6657a5;border:0;border-radius:16px;background:#efecfa;font-size:12px}.time-input{width:50px;padding:6px 4px;color:#6657a5;border:1px solid #d8d1ef;border-radius:8px;background:#fff;font-size:12px;text-align:center;outline:none}.edit-fields{display:grid;gap:8px}.edit-fields input,.edit-fields textarea{width:100%;padding:10px;color:#323233;border:1px solid #e3e0e8;border-radius:9px;background:#fafafa;font:inherit;font-size:12px;outline:none;resize:none}.edit-fields input:focus,.edit-fields textarea:focus,.time-input:focus{border-color:#7b6bb5;background:#fff}.edit-fields button{justify-self:end;padding:5px 0;color:#dc666d;border:0;background:transparent;font-size:10px}.edit-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin:4px 0 14px}.edit-actions button{padding:12px;color:#6657a5;border:1px solid #d8d1ef;border-radius:22px;background:#fff;font-size:12px}.edit-actions .save{color:#fff;border-color:#667eea;background:linear-gradient(135deg,#667eea,#764ba2);font-weight:600}
 </style>
