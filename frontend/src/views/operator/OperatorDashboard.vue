@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { showSuccessToast } from 'vant'
 import { useUserStore } from '../../stores/user'
 import { alertHistory, alerts as alertSeed, elders as elderSeed, operatorOverview, trips as tripSeed } from '../../mock/operator'
@@ -10,8 +10,9 @@ import TripsPanel from './TripsPanel.vue'
 import { alertApi, elderApi, isApiConfigured } from '../../services/api'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
-const activeNav = ref('overview')
+const activeNav = ref(['overview', 'alerts', 'elders', 'trips'].includes(route.query.view) ? route.query.view : 'overview')
 const showAccount = ref(false)
 const alerts = reactive([...alertSeed, ...alertHistory].map((alert) => ({ ...alert })))
 const elders = reactive(elderSeed.map((elder) => ({ ...elder })))
@@ -70,9 +71,11 @@ const navItems = [
   { key: 'alerts', icon: 'warning-o', label: '告警中心', badge: 3 },
   { key: 'elders', icon: 'friends-o', label: '老人档案' },
   { key: 'trips', icon: 'location-o', label: '出游管理' },
+  { key: 'profile', icon: 'manager-o', label: '我的' },
 ]
 
 function selectNav(item) {
+  if (item.key === 'profile') return router.push('/operator/profile')
   activeNav.value = item.key
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -171,7 +174,7 @@ button { font: inherit; }
 .list-card { overflow: hidden; border-radius: 10px; background: white; }.alert-row,.trip-row { display: flex; gap: 11px; align-items: flex-start; padding: 14px; border-bottom: 1px solid #ebedf0; }.alert-row:last-child,.trip-row:last-child { border-bottom: 0; }.alert-icon { width: 36px; height: 36px; display: grid; place-items: center; flex: none; border-radius: 9px; }.alert-icon.urgent { color: #ee4f59; background: #fff0f1; }.alert-icon.warning { color: #e28b35; background: #fff6e8; }.alert-main { min-width: 0; flex: 1; }.alert-main>div { display: flex; justify-content: space-between; gap: 8px; }.alert-main strong,.trip-main strong { color: #323233; font-size: 13px; }.alert-main time { color: #969799; font-size: 10px; }.alert-main p,.trip-main p { margin: 3px 0 7px; overflow: hidden; color: #969799; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.alert-main button { padding: 5px 10px; color: white; border: 0; border-radius: 12px; background: #667eea; font-size: 10px; cursor: pointer; }.alert-main button.handling { color: #d17b2d; background: #fff2df; }
 .avatar { width: 38px; height: 38px; display: grid; place-items: center; flex: none; color: #6657a5; border-radius: 50%; background: #efecfa; font-size: 13px; font-weight: 700; }.trip-main { min-width: 0; flex: 1; }.trip-main p { margin-bottom: 2px; }.trip-main small { color: #c0bac5; font-size: 10px; }.trip-row em { align-self: center; padding: 4px 7px; color: #3c9b6a; border-radius: 10px; background: #eaf8f1; font-size: 9px; font-style: normal; white-space: nowrap; }.trip-row em.attention { color: #d78234; background: #fff2e2; }
 .demo-note { margin: 20px 5px 0; color: #b3adb8; text-align: center; font-size: 9px; }
-.bottom-nav { position: fixed; inset: auto 0 0; z-index: 5; height: 62px; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #ebedf0; background: rgba(255,255,255,.97); }.bottom-nav button { position: relative; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; color: #969799; border: 0; background: transparent; cursor: pointer; }.bottom-nav button>span { position: relative; font-size: 20px; line-height: 1; }.bottom-nav small { font-size: 10px; }.bottom-nav .active { color: #667eea; }.bottom-nav em { position: absolute; top: -7px; right: -12px; min-width: 16px; padding: 1px 4px; color: white; border-radius: 8px; background: #ee5a62; font-size: 9px; font-style: normal; }
+.bottom-nav { position: fixed; inset: auto 0 0; z-index: 5; height: 62px; display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid #ebedf0; background: rgba(255,255,255,.97); }.bottom-nav button { position: relative; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; color: #969799; border: 0; background: transparent; cursor: pointer; }.bottom-nav button>span { position: relative; font-size: 20px; line-height: 1; }.bottom-nav small { font-size: 10px; }.bottom-nav .active { color: #667eea; }.bottom-nav em { position: absolute; top: -7px; right: -12px; min-width: 16px; padding: 1px 4px; color: white; border-radius: 8px; background: #ee5a62; font-size: 9px; font-style: normal; }
 .account-title{display:flex;align-items:center;gap:12px;margin-bottom:18px}.account-title>span{width:48px;height:48px;display:grid;place-items:center;color:#6657a5;border-radius:50%;background:#efecfa;font-size:17px;font-weight:700}.account-title h2{margin:0;color:#323233;font-size:18px}.account-title p{color:#969799;font-size:11px}.account-sheet :deep(.van-cell-group--inset){margin:0}.account-sheet>.van-button{margin-top:18px;color:#667eea;border-color:#667eea}.account-sheet>p{margin-top:12px;color:#b0aab4;text-align:center;font-size:9px}
 @media (min-width: 761px) { .operator-header { padding-inline: calc((100% - 732px) / 2 + 14px); }.bottom-nav { left: 50%; width: 760px; transform: translateX(-50%); border-inline: 1px solid #ebedf0; }.operator-page { background: #eeeaf2; }.operator-content { background: #f5f5f5; } }
 </style>

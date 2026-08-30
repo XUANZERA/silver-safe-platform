@@ -34,8 +34,11 @@
     </section>
 
     <nav class="bottom-nav" aria-label="运营导航">
-      <button type="button" @click="router.push('/operator')"><span>⌂</span>总览</button>
-      <button type="button" class="active"><span>◎</span>我的</button>
+      <button type="button" @click="goModule('overview')"><span><van-icon name="apps-o" /></span><small>总览</small></button>
+      <button type="button" @click="goModule('alerts')"><span><van-icon name="warning-o" /></span><small>告警</small></button>
+      <button type="button" @click="goModule('elders')"><span><van-icon name="friends-o" /></span><small>老人</small></button>
+      <button type="button" @click="goModule('trips')"><span><van-icon name="location-o" /></span><small>出游</small></button>
+      <button class="active" type="button"><span><van-icon name="manager-o" /></span><small>我的</small></button>
     </nav>
   </main>
 </template>
@@ -58,6 +61,7 @@ function toggleEdit() {
   if (editing.value) showSuccessToast('个人资料已保存')
   editing.value = !editing.value
 }
+function goModule(view) { router.push({ path: '/operator', query: { view } }) }
 </script>
 
 <style scoped>
@@ -75,8 +79,8 @@ h2 { margin: 0 18px 12px; font-size: 17px; }
 .info-card :deep(.van-cell-group--inset) { margin: 0; } .info-card :deep(.van-cell) { padding: 13px 18px; } .info-card :deep(.van-field__label), .info-card :deep(.van-cell__title) { color: #81798f; } .info-card :deep(.van-field__control), .info-card :deep(.van-cell__value) { color: #2b2442; }
 .ok { color: #2ca66f; font-weight: 700; }
 .actions-card { display: grid; gap: 12px; padding: 16px; }
-.bottom-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: flex; justify-content: space-around; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: #fff; box-shadow: 0 -4px 16px rgba(50, 32, 90, .1); }
-.bottom-nav button { display: grid; gap: 3px; border: 0; background: transparent; color: #958da3; font-size: 12px; cursor: pointer; } .bottom-nav span { font-size: 21px; line-height: 1; } .bottom-nav .active { color: #6f4bd8; font-weight: 700; }
+.bottom-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; height:62px;display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid #ebedf0;background:rgba(255,255,255,.97); }
+.bottom-nav button { display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;border:0;background:transparent;color:#969799;cursor:pointer}.bottom-nav span{font-size:20px;line-height:1}.bottom-nav small{font-size:10px}.bottom-nav .active{color:#667eea}
 </style>
 <style scoped>
 .operator-page { width: 100%; max-width: 430px; margin: 0 auto; box-shadow: 0 0 28px rgba(38,26,72,.14); } .bottom-nav { left: 50%; right: auto; width: min(100%,430px); transform: translateX(-50%); }
