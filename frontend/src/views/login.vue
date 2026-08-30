@@ -3,6 +3,8 @@ import { showFailToast, showSuccessToast, showToast } from 'vant'
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import { isApiConfigured, loginRequest } from '../services/api'
+import logo from '../assets/logo.png'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -20,19 +22,27 @@ const rememberMe = ref(false)
 const onSubmit = async () => {
   loading.value = true
   try {
+    if (isApiConfigured()) {
+      const user = await loginRequest(formData.username, formData.password)
+      userStore.setUserInfo({ ...user, path: user.role === 'operator' ? '/operator' : user.role === 'family' ? '/child' : '/elder' })
+      showSuccessToast('登录成功')
+      await router.push(userStore.userInfo.path)
+      return
+    }
     await new Promise((resolve) => setTimeout(resolve, 650))
-    if (formData.username !== 'operator01' || formData.password !== 'demo123') {
+    const accounts = {
+      operator01: { id: 9001, username: 'operator01', displayName: '林晓岚', role: 'operator', phone: '188****2608', path: '/operator' },
+      elder01: { id: 1001, username: 'elder01', displayName: '张建国', role: 'elder', phone: '138****4031', path: '/elder' },
+      child01: { id: 2001, username: 'child01', displayName: '张小明', role: 'family', phone: '138****2256', path: '/child' },
+      family01: { id: 2001, username: 'family01', displayName: '张小明', role: 'family', phone: '138****2256', path: '/child' },
+    }
+    const account = accounts[formData.username]
+    if (!account || formData.password !== 'demo123') {
       throw new Error('invalid demo account')
     }
-    userStore.setUserInfo({
-      id: 9001,
-      username: 'operator01',
-      displayName: '林晓岚',
-      role: 'operator',
-      phone: '188****2608',
-    })
+    userStore.setUserInfo(account)
     showSuccessToast('登录成功')
-    await router.push('/operator')
+    await router.push(account.path)
   } catch {
     showFailToast('演示账号或密码不正确')
   } finally {
@@ -50,8 +60,14 @@ function goToForgotPassword() {
   showToast('忘记密码功能开发中...')
 }
 
-function fillDemoAccount() {
-  formData.username = 'operator01'
+const demoAccounts = [
+  { username: 'elder01', role: '老人端', displayName: '张建国' },
+  { username: 'child01', role: '子女端', displayName: '张小明' },
+  { username: 'operator01', role: '运营端', displayName: '林晓岚' },
+]
+
+function fillDemoAccount(username) {
+  formData.username = username
   formData.password = 'demo123'
 }
 </script>
@@ -60,7 +76,7 @@ function fillDemoAccount() {
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <h1 class="login-title">银发独游</h1>
+        <img class="login-logo" :src="logo" alt="星斗守眼安游" />
       </div>
 
       <van-form @submit="onSubmit" ref="formRef">
@@ -113,11 +129,14 @@ function fillDemoAccount() {
         </div>
       </van-form>
 
-      <button class="demo-account" type="button" @click="fillDemoAccount">
-        <span class="demo-dot"></span>
-        填入演示账号
-        <strong>operator01 / demo123</strong>
-      </button>
+      <div class="demo-title"><span class="demo-dot"></span>选择演示身份</div>
+      <div class="demo-accounts">
+        <button v-for="account in demoAccounts" :key="account.username" class="demo-account" type="button" @click="fillDemoAccount(account.username)">
+          <span class="demo-role">{{ account.role }}</span>
+          <strong>{{ account.username }}</strong>
+          <small>{{ account.displayName }} · 点击填入</small>
+        </button>
+      </div>
       <p class="role-note">登录后将根据账号身份自动进入对应页面</p>
       <p class="demo-note">本页面仅使用虚构数据进行产品演示</p>
     </div>
@@ -243,25 +262,31 @@ function fillDemoAccount() {
   color: #1677d6;
 }
 
+.login-logo { display: block; width: 190px; height: 112px; margin: 0 auto 8px; object-fit: contain; }
+
+.demo-title { margin: 18px 16px 8px; color: #6e5a91; font-size: 12px; font-weight: 700; }
+.demo-accounts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 16px; }
 .demo-account {
-  width: calc(100% - 32px);
-  margin: 18px 16px 0;
-  padding: 11px 12px;
+  min-width: 0;
+  padding: 11px 8px;
   border: 1px dashed #c9bfe0;
   border-radius: 12px;
   color: #6e5a91;
   background: #faf8ff;
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
 }
 
 .demo-account strong {
   display: block;
-  margin-top: 2px;
+  margin-top: 5px;
   color: #4f3d70;
-  font-size: 13px;
+  font-size: 12px;
 }
+
+.demo-role { display: block; color: #7a68bb; font-size: 11px; font-weight: 700; }
+.demo-account small { display: block; margin-top: 4px; color: #a69bb8; font-size: 10px; }
 
 .demo-dot {
   display: inline-block;

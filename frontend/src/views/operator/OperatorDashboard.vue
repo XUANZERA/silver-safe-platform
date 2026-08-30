@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { showSuccessToast } from 'vant'
 import { useUserStore } from '../../stores/user'
@@ -7,6 +7,7 @@ import { alertHistory, alerts as alertSeed, elders as elderSeed, operatorOvervie
 import AlertsPanel from './AlertsPanel.vue'
 import EldersPanel from './EldersPanel.vue'
 import TripsPanel from './TripsPanel.vue'
+import { alertApi, elderApi, isApiConfigured } from '../../services/api'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -25,6 +26,29 @@ function refreshTime() { currentTime.value = timeFormatter.format(new Date()) }
 refreshTime()
 const timeTimer = window.setInterval(refreshTime, 30_000)
 onBeforeUnmount(() => window.clearInterval(timeTimer))
+
+onMounted(async () => {
+  if (!isApiConfigured()) return
+  try {
+    const [elderData, alertData] = await Promise.all([elderApi.list(), alertApi.list('page_size=100')])
+    if (elderData?.items?.length) {
+      elders.splice(0, elders.length, ...elderData.items.map((item) => ({
+        id: item.id, name: item.name, age: item.age, status: '在家', risk: '低风险', family: '家属', familyPhone: '已绑定'
+      })))
+    }
+    if (alertData?.items?.length) {
+      alerts.splice(0, alerts.length, ...alertData.items.map((item) => ({
+        id: item.id, elderName: elderData.items.find((elder) => elder.id === item.elder_id)?.name || `老人 ${item.elder_id}`,
+        type: item.type === 'emergency' ? 'SOS 紧急求助' : '电子围栏越界', level: item.type === 'emergency' ? 'urgent' : 'warning',
+        status: item.status === 'resolved' ? '已解决' : item.status === 'processing' ? '处理中' : '待处理',
+        location: item.latitude && item.longitude ? `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}` : '位置待更新',
+        time: new Date(item.occurred_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      })))
+    }
+  } catch (error) {
+    console.warn('业务数据加载失败，将继续使用演示数据', error)
+  }
+})
 
 function elderByName(name) { return elders.find((elder) => elder.name === name) }
 function contactFor(name) { const elder = elderByName(name); return elder ? `${elder.family} ${elder.familyPhone}` : '暂无联系人' }
@@ -150,4 +174,10 @@ button { font: inherit; }
 .bottom-nav { position: fixed; inset: auto 0 0; z-index: 5; height: 62px; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #ebedf0; background: rgba(255,255,255,.97); }.bottom-nav button { position: relative; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; color: #969799; border: 0; background: transparent; cursor: pointer; }.bottom-nav button>span { position: relative; font-size: 20px; line-height: 1; }.bottom-nav small { font-size: 10px; }.bottom-nav .active { color: #667eea; }.bottom-nav em { position: absolute; top: -7px; right: -12px; min-width: 16px; padding: 1px 4px; color: white; border-radius: 8px; background: #ee5a62; font-size: 9px; font-style: normal; }
 .account-title{display:flex;align-items:center;gap:12px;margin-bottom:18px}.account-title>span{width:48px;height:48px;display:grid;place-items:center;color:#6657a5;border-radius:50%;background:#efecfa;font-size:17px;font-weight:700}.account-title h2{margin:0;color:#323233;font-size:18px}.account-title p{color:#969799;font-size:11px}.account-sheet :deep(.van-cell-group--inset){margin:0}.account-sheet>.van-button{margin-top:18px;color:#667eea;border-color:#667eea}.account-sheet>p{margin-top:12px;color:#b0aab4;text-align:center;font-size:9px}
 @media (min-width: 761px) { .operator-header { padding-inline: calc((100% - 732px) / 2 + 14px); }.bottom-nav { left: 50%; width: 760px; transform: translateX(-50%); border-inline: 1px solid #ebedf0; }.operator-page { background: #eeeaf2; }.operator-content { background: #f5f5f5; } }
+</style>
+<style scoped>
+.operator-page { width: 100%; max-width: 430px; margin: 0 auto; box-shadow: 0 0 28px rgba(38,26,72,.14); } .bottom-nav { left: 50%; right: auto; width: min(100%,430px); transform: translateX(-50%); }
+</style>
+<style scoped>
+.brand-line span{color:transparent;font-size:0;background:#fff url('/src/assets/logo.png') center/contain no-repeat}
 </style>

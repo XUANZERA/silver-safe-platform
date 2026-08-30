@@ -1,235 +1,83 @@
 <template>
-  <div class="operator-profile-container">
-    <!-- 页面标题 -->
-    <h2 class="page-title">我的个人信息</h2>
+  <main class="operator-page">
+    <header class="app-header">
+      <button class="back-button" type="button" aria-label="返回" @click="router.push('/operator')">‹</button>
+      <div>
+        <div class="brand">银发独游</div>
+        <div class="subtitle">运营工作台 · 个人账号</div>
+      </div>
+      <span class="role-badge">运营端</span>
+    </header>
 
-    <!-- 基础账号信息 -->
-    <div class="info-section">
-      <div class="info-row">
-        <span class="label">登录账号：</span>
-        <span class="value">{{ userInfo.account }}</span>
+    <section class="profile-hero">
+      <div class="avatar">{{ user.name.slice(0, 1) }}</div>
+      <div>
+        <h1>{{ user.name }}</h1>
+        <p>{{ user.role }} · {{ user.organization }}</p>
       </div>
-      
-      <div class="info-row">
-        <span class="label">登录密码：</span>
-        <span class="value">{{ showPassword ? userInfo.password : '********' }}
-          <button class="btn-toggle" @click="showPassword = !showPassword">
-              {{ showPassword ? '隐藏' : '查看' }}
-            </button>
-        </span>
-        <span class="link-btn" @click="handleEditPassword">修改密码</span>
-      </div>
+    </section>
 
-      <div class="info-row">
-        <span class="label">绑定手机：</span>
-        <span class="value" :class="{ 'text-danger': !userInfo.phoneNumber }">
-          {{ userInfo.phoneNumber || '待绑定' }}
-        </span>
-      </div>
+    <section class="card info-card">
+      <h2>账号信息</h2>
+      <van-cell-group inset>
+        <van-field v-model="user.name" label="姓名" :readonly="!editing" />
+        <van-field v-model="user.phone" label="联系电话" :readonly="!editing" />
+        <van-field v-model="user.organization" label="所属机构" :readonly="!editing" />
+        <van-cell title="账号角色" :value="user.role" />
+        <van-cell title="账号状态"><template #value><span class="ok">正常</span></template></van-cell>
+      </van-cell-group>
+    </section>
 
-      <div class="info-row">
-        <span class="label">所属机构：</span>
-        <span class="value name-value">{{ userInfo.organization }}</span>
-      </div>
-      
-      <div class="info-row">
-        <span class="label">运营角色：</span>
-        <span class="value">
-          <span class="status-tag status-active">{{ userInfo.role }}</span>
-        </span>
-      </div>
+    <section class="card actions-card">
+      <van-button block round type="primary" @click="toggleEdit">{{ editing ? '保存资料' : '编辑资料' }}</van-button>
+      <van-button block round plain type="primary" @click="router.push('/operator')">返回运营总览</van-button>
+    </section>
 
-      <div class="info-row">
-        <span class="label">账号状态：</span>
-        <span class="value text-success">正常</span>
-      </div>
-    </div>
-
-    <!-- 操作按钮区域（上下排列） -->
-    <div class="action-area">
-      <button class="btn-primary" @click="handleViewRecords">查看服务记录</button>
-      <button class="btn-secondary" @click="handleEditProfile">修改基础信息</button>
-    </div>
-  </div>
+    <nav class="bottom-nav" aria-label="运营导航">
+      <button type="button" @click="router.push('/operator')"><span>⌂</span>总览</button>
+      <button type="button" class="active"><span>◎</span>我的</button>
+    </nav>
+  </main>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue';
+import { reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { showSuccessToast } from 'vant'
 
-// 模拟从后端接口获取的运营端用户数据
-const userInfo = reactive({
-  account: 'op_wang_admin',
-  password: 'Op@Secure2024',
-  phoneNumber: '138****5678', 
+const router = useRouter()
+const editing = ref(false)
+const user = reactive({
+  name: '林晓岚',
+  phone: '188****2608',
   organization: '夕阳红文旅服务处',
-  role: '高级运营专员'
-});
+  role: '平台运营员'
+})
 
-// 密码显隐状态
-const showPassword = ref(false);
-
-// 修改密码
-const handleEditPassword = () => {
-  alert('即将跳转到修改密码页面...');
-};
-
-// 查看服务记录
-const handleViewRecords = () => {
-  alert('即将跳转到服务记录管理列表...');
-};
-
-// 修改基础信息
-const handleEditProfile = () => {
-  alert('即将跳转到修改信息页面...');
-};
+function toggleEdit() {
+  if (editing.value) showSuccessToast('个人资料已保存')
+  editing.value = !editing.value
+}
 </script>
 
 <style scoped>
-/* 根节点全屏白底，保持全局统一 */
-.operator-profile-container {
-  box-sizing: border-box;
-  min-height: 100vh;
-  width: 100%;
-  padding: 30px;
-  background-color: #ffffff;
-  font-family: 'Microsoft YaHei', sans-serif;
-  color: #333;
-}
-
-.page-title {
-  font-size: 28px;
-  font-weight: bold;
-  margin-bottom: 30px;
-  color: #1a1a1a;
-  text-align: center;
-}
-
-/* 信息区块 */
-.info-section {
-  margin-bottom: 20px;
-}
-
-/* 纯左对齐排版 */
-.info-row {
-  display: flex;
-  align-items: center;
-  font-size: 20px;
-  line-height: 1.6;
-  margin-bottom: 16px;
-}
-
-.label {
-  flex-shrink: 0;
-  width: 140px;
-  color: #666;
-  font-weight: 500;
-}
-
-.value {
-  color: #1a1a1a;
-  font-weight: bold;
-}
-
-/* 机构名称使用醒目的深色 */
-.name-value {
-  font-size: 24px;
-  color: #1a1a1a; 
-}
-
-.btn-toggle {
-    margin-left: 10px;
-    padding: 4px 8px;
-    font-size: 16px;
-    border: 1px solid #ccc;
-    background-color: #fffefe;
-    border-radius: 4px;
-}
-/* 标准蓝无框文字按钮 */
-.link-btn {
-  margin-left: 15px;
-  color: #0400ff;
-  font-size: 18px;
-  font-weight: normal;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-.link-btn:hover {
-  opacity: 0.7;
-}
-
-/* 待绑定红色提示 */
-.text-danger {
-  color: #ff1414;
-}
-
-/* 账号正常绿色提示 */
-.text-success {
-  color: #67c23a;
-}
-
-/* 状态标签 */
-.status-tag {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 18px;
-  font-weight: bold;
-}
-.status-active {
-  background-color: #d9ecff;
-  color: #409eff;
-  border: 1px solid #409eff;
-}
-
-/* 底部按钮区域*/
-.action-area {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 40px;
-}
-
-.btn-primary, .btn-secondary {
-  width: 100%;
-  padding: 16px 0;
-  font-size: 20px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: opacity 0.2s;
-}
-
-.btn-primary {
-  background-color: #409eff;
-  color: #fff;
-}
-
-.btn-secondary {
-  background-color: #f0f0f0;
-  color: #666;
-}
-
-.btn-primary:hover, .btn-secondary:hover {
-  opacity: 0.85;
-}
-
-/* 移动端响应式适配 */
-@media (max-width: 600px) {
-  .operator-profile-container {
-    padding: 15px;
-  }
-  .info-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .label {
-    width: auto;
-    margin-bottom: 4px;
-  }
-  .link-btn {
-    margin-left: 0;
-    margin-top: 4px;
-  }
-}
+.operator-page { min-height: 100vh; box-sizing: border-box; padding-bottom: 84px; background: #f7f5fc; color: #2b2442; }
+.app-header { display: flex; align-items: center; gap: 12px; padding: 18px 18px 22px; color: #fff; background: linear-gradient(135deg, #6f4bd8, #8d6be7); }
+.back-button { border: 0; background: transparent; color: #fff; font-size: 34px; line-height: 1; padding: 0 4px; cursor: pointer; }
+.brand { font-size: 20px; font-weight: 800; letter-spacing: 1px; }
+.subtitle { margin-top: 4px; font-size: 12px; opacity: .82; }
+.role-badge { margin-left: auto; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.2); font-size: 12px; }
+.profile-hero { display: flex; align-items: center; gap: 14px; margin: -1px 14px 14px; padding: 20px 18px; border-radius: 0 0 18px 18px; background: #fff; box-shadow: 0 5px 18px rgba(82, 58, 140, .08); }
+.avatar { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; color: #fff; font-size: 25px; font-weight: 800; background: linear-gradient(145deg, #8a68e5, #6241c4); }
+h1 { margin: 0; font-size: 21px; } .profile-hero p { margin: 7px 0 0; color: #81798f; font-size: 13px; }
+.card { margin: 14px; padding: 16px 0; border-radius: 16px; background: #fff; box-shadow: 0 5px 18px rgba(82, 58, 140, .07); }
+h2 { margin: 0 18px 12px; font-size: 17px; }
+.info-card :deep(.van-cell-group--inset) { margin: 0; } .info-card :deep(.van-cell) { padding: 13px 18px; } .info-card :deep(.van-field__label), .info-card :deep(.van-cell__title) { color: #81798f; } .info-card :deep(.van-field__control), .info-card :deep(.van-cell__value) { color: #2b2442; }
+.ok { color: #2ca66f; font-weight: 700; }
+.actions-card { display: grid; gap: 12px; padding: 16px; }
+.bottom-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: flex; justify-content: space-around; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: #fff; box-shadow: 0 -4px 16px rgba(50, 32, 90, .1); }
+.bottom-nav button { display: grid; gap: 3px; border: 0; background: transparent; color: #958da3; font-size: 12px; cursor: pointer; } .bottom-nav span { font-size: 21px; line-height: 1; } .bottom-nav .active { color: #6f4bd8; font-weight: 700; }
+</style>
+<style scoped>
+.operator-page { width: 100%; max-width: 430px; margin: 0 auto; box-shadow: 0 0 28px rgba(38,26,72,.14); } .bottom-nav { left: 50%; right: auto; width: min(100%,430px); transform: translateX(-50%); }
 </style>
