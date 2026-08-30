@@ -31,6 +31,7 @@
     <section class="card actions-card">
       <van-button block round type="primary" @click="toggleEdit">{{ editing ? '保存资料' : '编辑资料' }}</van-button>
       <van-button block round plain type="primary" @click="router.push('/operator')">返回运营总览</van-button>
+      <button class="logout-button" type="button" @click="logout"><van-icon name="revoke" /> 退出登录</button>
     </section>
 
     <nav class="bottom-nav" aria-label="运营导航">
@@ -47,9 +48,12 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { showSuccessToast } from 'vant'
+import { useUserStore } from '../../stores/user'
+import { isApiConfigured, logoutRequest } from '../../services/api'
 
 const router = useRouter()
 const editing = ref(false)
+const userStore = useUserStore()
 const user = reactive({
   name: '林晓岚',
   phone: '188****2608',
@@ -62,6 +66,7 @@ function toggleEdit() {
   editing.value = !editing.value
 }
 function goModule(view) { router.push({ path: '/operator', query: { view } }) }
+async function logout() { if (isApiConfigured()) await logoutRequest().catch(() => null); userStore.logout(); router.replace('/login') }
 </script>
 
 <style scoped>
@@ -79,6 +84,7 @@ h2 { margin: 0 18px 12px; font-size: 17px; }
 .info-card :deep(.van-cell-group--inset) { margin: 0; } .info-card :deep(.van-cell) { padding: 13px 18px; } .info-card :deep(.van-field__label), .info-card :deep(.van-cell__title) { color: #81798f; } .info-card :deep(.van-field__control), .info-card :deep(.van-cell__value) { color: #2b2442; }
 .ok { color: #2ca66f; font-weight: 700; }
 .actions-card { display: grid; gap: 12px; padding: 16px; }
+.logout-button{width:100%;padding:12px;color:#e25e66;border:1px solid #f3c7ca;border-radius:22px;background:#fff;font-size:13px}
 .bottom-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; height:62px;display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid #ebedf0;background:rgba(255,255,255,.97); }
 .bottom-nav button { display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;border:0;background:transparent;color:#969799;cursor:pointer}.bottom-nav span{font-size:20px;line-height:1}.bottom-nav small{font-size:10px}.bottom-nav .active{color:#667eea}
 </style>
