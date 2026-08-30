@@ -39,9 +39,9 @@
     </div>
 
     <!-- 右下角悬浮应急按钮 -->
-    <div class="emergency-fab" @click="showEmergencyInfo">
-      🆘 紧急联系
-    </div>
+    <button class="emergency-fab" type="button" @click="showEmergencyInfo">
+      <van-icon name="phone-o" /> 紧急联系家人
+    </button>
     <nav class="elder-nav" aria-label="端内导航"><button type="button" @click="router.push(homePath)"><van-icon name="home-o" /><small>首页</small></button><button class="active" type="button"><van-icon name="todo-list-o" /><small>行程</small></button><button type="button" @click="router.push(profilePath)"><van-icon name="manager-o" /><small>我的</small></button></nav>
   </div>
 </template>
@@ -231,11 +231,12 @@ const showEmergencyInfo = () => {
 }
 </style>
 <style scoped>
-.elderly-schedule-container{padding-top:0}.schedule-header{margin-bottom:20px}
+.elderly-schedule-container{width:100%;max-width:430px;min-height:100vh;margin:0 auto;padding:0 14px 90px;overflow:hidden;color:#323233;background:#f5f5f5;box-shadow:0 0 28px rgba(38,26,72,.14)}
+.app-header{height:68px;margin:0 -14px 18px;padding:14px 18px;background:linear-gradient(135deg,#667eea,#764ba2)}.app-header .brand span{width:34px;height:34px;border-radius:11px}.app-header .brand strong{font-size:16px}.app-header>small{font-size:10px}
+.schedule-header{display:flex;align-items:center;justify-content:center;height:42px;margin:0 0 14px}.back-button{left:0;top:4px;width:34px;height:34px;color:#6657a5;background:#efecfa}.schedule-title{color:#403675;font-size:20px}
+.timeline-wrapper{padding:0}.timeline-item{align-items:stretch;margin-bottom:12px}.timeline-node{width:56px;align-items:flex-start;padding-top:14px}.node-time{color:#6657a5;font-size:14px}.node-line{width:2px;min-height:70px;margin:8px 0 0 21px;background:#dcd8ed}.timeline-card{min-width:0;padding:15px;border:0;border-radius:12px;border-left:3px solid #7668b5;box-shadow:0 3px 12px rgba(45,33,82,.07)}.card-header{display:block;margin-bottom:8px}.project-title{color:#323233;font-size:16px}.transport-tag{display:inline-block;margin-top:7px;padding:4px 8px;color:#6657a5;border-radius:12px;background:#efecfa;font-size:10px}.project-desc{margin:0 0 10px;color:#646566;font-size:12px;line-height:1.6}.elderly-tips{gap:6px}.tip-tag{padding:4px 7px;border-radius:8px;font-size:9px}.tip-tag.safe{color:#3d9a6a;background:#eaf8f1}.tip-tag.warning{color:#c47c2b;background:#fff5e7}
+.emergency-fab{position:static;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;margin:4px 0 16px;padding:12px;color:#e25e66;border:1px solid #f3c7ca;border-radius:22px;background:#fff;font-size:13px;font-weight:600;box-shadow:none}.emergency-fab:hover{transform:none}.elder-nav{left:50%;right:auto;width:min(100%,430px);height:62px;transform:translateX(-50%)}
 </style>
 <style scoped>
 .app-header .brand span{color:transparent;background:#fff url('/src/assets/logo.png') center/contain no-repeat}
-</style>
-<style scoped>
-.elderly-schedule-container { width: 100%; max-width: 430px; margin: 0 auto; box-shadow: 0 0 28px rgba(38,26,72,.14); } .elder-nav { left: 50%; right: auto; width: min(100%,430px); transform: translateX(-50%); }
 </style>
