@@ -23,13 +23,22 @@ def client() -> Iterator[TestClient]:
 @pytest.fixture(autouse=True)
 def clean_business_data(client: TestClient) -> Iterator[None]:
     from app.db.session import SessionLocal
+    from app.models.alert import Alert, AlertLog
+    from app.models.location import Location
     from app.models.security import AuditLog, AuthSession
+    from app.models.trip import Trip
 
+    client.cookies.clear()
     with SessionLocal() as session:
         session.execute(delete(AuditLog))
         session.execute(delete(AuthSession))
+        session.execute(delete(AlertLog))
+        session.execute(delete(Alert))
+        session.execute(delete(Location))
+        session.execute(delete(Trip))
         session.commit()
     yield
+    client.cookies.clear()
 
 
 def pytest_sessionfinish() -> None:
