@@ -13,7 +13,9 @@ async function request(path, options = {}, retry = true) {
   // FIX START: 读取后端统一错误结构中的真实错误消息。
   if (!response.ok) throw new Error(payload?.error?.message || payload?.message || payload?.detail || '请求失败')
   // FIX END: 读取后端统一错误结构中的真实错误消息。
-  return payload.data ?? payload
+  // FIX START: 后端 data=null 代表“没有数据”，不能退回整个响应包装对象。
+  return Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
+  // FIX END: 正确保留后端返回的 null 数据。
 }
 
 export async function loginRequest(username, password) {
