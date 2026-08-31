@@ -68,9 +68,9 @@ trips.forEach((trip) => { trip.contact = `家属：${contactFor(trip.elderName)}
 
 const navItems = [
   { key: 'overview', icon: 'apps-o', label: '运营总览' },
-  { key: 'alerts', icon: 'warning-o', label: '告警中心', badge: 3 },
-  { key: 'elders', icon: 'friends-o', label: '老人档案' },
-  { key: 'trips', icon: 'location-o', label: '出游管理' },
+  { key: 'alerts', icon: 'warning-o', label: '告警', badge: 3 },
+  { key: 'elders', icon: 'friends-o', label: '老人' },
+  { key: 'trips', icon: 'location-o', label: '出游' },
   { key: 'profile', icon: 'manager-o', label: '我的' },
 ]
 
@@ -97,9 +97,9 @@ function logout() {
 
 <template>
   <div class="operator-page">
-    <AlertsPanel v-if="activeNav === 'alerts'" :alerts="alerts" @back="activeNav = 'overview'" @changed="onAlertChanged" />
-    <EldersPanel v-else-if="activeNav === 'elders'" :elders="elders" @back="activeNav = 'overview'" @show-trips="activeNav = 'trips'" />
-    <TripsPanel v-else-if="activeNav === 'trips'" :trips="trips" @back="activeNav = 'overview'" @ended="onTripEnded" />
+    <AlertsPanel v-if="activeNav === 'alerts'" :alerts="alerts" @changed="onAlertChanged" />
+    <EldersPanel v-else-if="activeNav === 'elders'" :elders="elders" @show-trips="activeNav = 'trips'" />
+    <TripsPanel v-else-if="activeNav === 'trips'" :trips="trips" @ended="onTripEnded" />
     <template v-else>
     <header class="operator-header">
       <div class="header-row">
@@ -151,7 +151,7 @@ function logout() {
     </template>
 
     <nav class="bottom-nav" aria-label="运营端主导航">
-      <button v-for="item in navItems" :key="item.key" :class="{ active: activeNav === item.key }" type="button" @click="selectNav(item)"><span><van-icon :name="item.icon" /><em v-if="item.key === 'alerts' && unresolvedAlertCount">{{ unresolvedAlertCount }}</em></span><small>{{ item.label.replace('运营', '') }}</small></button>
+      <button v-for="item in navItems" :key="item.key" :class="{ active: activeNav === item.key }" type="button" @click="selectNav(item)"><span><van-icon :name="item.icon" /><em v-if="item.key === 'alerts' && unresolvedAlertCount">{{ unresolvedAlertCount }}</em></span><small>{{ item.label }}</small></button>
     </nav>
     <van-popup v-model:show="showAccount" position="bottom" round :style="{ padding: '22px 18px 30px' }"><div class="account-sheet"><div class="account-title"><span>岚</span><div><h2>{{ userStore.userInfo.displayName }}</h2><p>平台运营员 · {{ userStore.userInfo.username }}</p></div></div><van-cell-group inset><van-cell title="账号身份" value="运营端"/><van-cell title="联系电话" :value="userStore.userInfo.phone"/><van-cell title="登录状态" value="演示会话有效"/></van-cell-group><van-button block round plain type="primary" @click="logout">退出登录</van-button><p>账号及电话均为虚构演示信息</p></div></van-popup>
   </div>
@@ -161,14 +161,14 @@ function logout() {
 * { box-sizing: border-box; }
 button { font: inherit; }
 .operator-page { min-height: 100vh; padding-bottom: 72px; color: #323233; background: #f5f5f5; text-align: left; }
-.operator-header { padding: 18px 18px 52px; color: white; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.operator-header { padding: 16px 18px 24px; color: white; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
 .header-row { display: flex; align-items: center; justify-content: space-between; }
 .header-actions{display:flex;gap:7px}
-.brand-line { display: flex; align-items: center; gap: 9px; }.brand-line span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; background: rgba(255,255,255,.18); font-size: 15px; font-weight: 700; }.brand-line strong { font-size: 16px; }
+.brand-line { display: flex; align-items: center; gap: 10px; }.brand-line span { width: 40px; height: 40px; display: grid; place-items: center; border: 3px solid rgba(255,255,255,.9); border-radius: 12px; background: rgba(255,255,255,.18); font-size: 15px; font-weight: 700; }.brand-line strong { font-size: 17px; letter-spacing: .2px; }
 .header-row button { width: 34px; height: 34px; color: white; border: 0; border-radius: 50%; background: rgba(255,255,255,.14); cursor: pointer; }
-.operator-header>p { margin-top: 25px; color: rgba(255,255,255,.72); font-size: 12px; }.operator-header h1 { margin: 3px 0 8px; color: white; font-size: 25px; font-weight: 700; }.identity { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,.82); font-size: 12px; }.identity span { width: 7px; height: 7px; border-radius: 50%; background: #7ee2a8; box-shadow: 0 0 0 3px rgba(126,226,168,.18); }
+.operator-header>p { margin: 18px 0 2px; color: rgba(255,255,255,.72); font-size: 11px; }.operator-header h1 { margin: 0 0 7px; color: white; font-size: 23px; font-weight: 700; }.identity { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,.82); font-size: 11px; }.identity span { width: 7px; height: 7px; border-radius: 50%; background: #7ee2a8; box-shadow: 0 0 0 3px rgba(126,226,168,.18); }
 .operator-content { max-width: 760px; margin: 0 auto; padding: 0 14px 28px; }
-.summary-card { min-height: 116px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: -34px; padding: 18px; border-radius: 12px; background: white; box-shadow: 0 4px 16px rgba(40,28,65,.1); text-align: center; }.summary-card div:not(.summary-divider) { display: grid; }.summary-card small { color: #969799; font-size: 11px; }.summary-card strong { color: #5e50a0; font-size: 30px; line-height: 1.2; }.summary-card span { color: #646566; font-size: 11px; }.summary-card .warning-number { color: #ee5a62; }.summary-divider { width: 1px; height: 52px; background: #ebedf0; }
+.summary-card { min-height: 122px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 0; padding: 16px 18px; border-radius: 16px; background: white; box-shadow: 0 6px 18px rgba(40,28,65,.1); text-align: center; }.summary-card div:not(.summary-divider) { display: grid; gap: 1px; }.summary-card small { color: #969799; font-size: 11px; }.summary-card strong { color: #5e50a0; font-size: 30px; line-height: 1.2; }.summary-card span { color: #646566; font-size: 11px; }.summary-card .warning-number { color: #ee5a62; }.summary-divider { width: 1px; height: 58px; background: #ebedf0; }
 .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 22px; }.quick-grid button { min-width: 0; padding: 13px 4px 12px; border: 0; border-radius: 10px; background: white; cursor: pointer; }.quick-grid strong,.quick-grid small { display: block; }.quick-grid strong { margin-top: 6px; color: #323233; font-size: 18px; }.quick-grid small { margin-top: 1px; color: #969799; font-size: 10px; white-space: nowrap; }.quick-icon { width: 32px; height: 32px; display: grid; place-items: center; margin: auto; border-radius: 10px; font-size: 17px; }.quick-icon.purple{color:#6657a5;background:#f0edfb}.quick-icon.blue{color:#3f8cc6;background:#eaf5fc}.quick-icon.coral{color:#e45d66;background:#fdecee}.quick-icon.green{color:#44a676;background:#eaf8f1}
 .section-block { margin-top: 18px; }.section-title { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 9px; }.section-title h2 { margin: 0; color: #323233; font-size: 16px; font-weight: 700; }.section-title p { margin-top: 2px; color: #969799; font-size: 10px; }.section-title button { color: #7a68bb; border: 0; background: transparent; font-size: 11px; cursor: pointer; }
 .list-card { overflow: hidden; border-radius: 10px; background: white; }.alert-row,.trip-row { display: flex; gap: 11px; align-items: flex-start; padding: 14px; border-bottom: 1px solid #ebedf0; }.alert-row:last-child,.trip-row:last-child { border-bottom: 0; }.alert-icon { width: 36px; height: 36px; display: grid; place-items: center; flex: none; border-radius: 9px; }.alert-icon.urgent { color: #ee4f59; background: #fff0f1; }.alert-icon.warning { color: #e28b35; background: #fff6e8; }.alert-main { min-width: 0; flex: 1; }.alert-main>div { display: flex; justify-content: space-between; gap: 8px; }.alert-main strong,.trip-main strong { color: #323233; font-size: 13px; }.alert-main time { color: #969799; font-size: 10px; }.alert-main p,.trip-main p { margin: 3px 0 7px; overflow: hidden; color: #969799; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.alert-main button { padding: 5px 10px; color: white; border: 0; border-radius: 12px; background: #667eea; font-size: 10px; cursor: pointer; }.alert-main button.handling { color: #d17b2d; background: #fff2df; }
@@ -183,4 +183,13 @@ button { font: inherit; }
 </style>
 <style scoped>
 .brand-line span{color:transparent;font-size:0;background:#fff url('/src/assets/logo.png') center/contain no-repeat}
+</style>
+<style scoped>
+/* Keep the summary card visually attached to the header without covering text. */
+.summary-card { margin-top: -4px; }
+.brand-line span { width: 34px; height: 34px; border-width: 2px; border-radius: 11px; }
+.brand-line strong { font-size: 16px; letter-spacing: 0; }
+</style>
+<style scoped>
+.brand-line strong { line-height: 1; transform: translateY(3px); }
 </style>

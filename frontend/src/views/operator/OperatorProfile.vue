@@ -1,7 +1,6 @@
 <template>
   <main class="operator-page">
     <header class="app-header">
-      <button class="back-button" type="button" aria-label="返回" @click="router.push('/operator')">‹</button>
       <div>
         <div class="brand">银发独游</div>
         <div class="subtitle">运营工作台 · 个人账号</div>
@@ -30,7 +29,6 @@
 
     <section class="card actions-card">
       <van-button block round type="primary" @click="toggleEdit">{{ editing ? '保存资料' : '编辑资料' }}</van-button>
-      <van-button block round plain type="primary" @click="router.push('/operator')">返回运营总览</van-button>
       <button class="logout-button" type="button" @click="logout"><van-icon name="revoke" /> 退出登录</button>
     </section>
 

@@ -34,11 +34,18 @@ p { margin: 0; }
 
 /* 登录后的页面统一使用同一高度的品牌/标题栏。 */
 :where(.elder-header, .child-header, .operator-header, .elderly-schedule-container > .app-header, .operator-page > .app-header, .profile-page > header) {
+  position: relative !important;
   width: auto;
   height: var(--app-header-height) !important;
   min-height: var(--app-header-height) !important;
   padding: 14px 18px !important;
   background: linear-gradient(135deg, var(--app-primary), var(--app-primary-dark)) !important;
+}
+
+:where(.elder-header, .child-header, .operator-header, .elderly-schedule-container > .app-header) :where(.brand, .brand-line) {
+  position: absolute !important;
+  top: 14px !important;
+  left: 18px !important;
 }
 
 /* 首页只保留品牌行，详细信息放到内容卡片，避免各端头部高度漂移。 */
@@ -58,6 +65,31 @@ p { margin: 0; }
 :where(.child-page > main, .profile-page > main, .operator-content, .elder-content) {
   padding-right: var(--app-content-padding) !important;
   padding-left: var(--app-content-padding) !important;
+}
+
+/* Shared brand geometry across elder, family, operator and schedule pages. */
+:where(.brand, .brand-line) {
+  height: 34px !important;
+  align-items: center !important;
+  gap: 9px !important;
+}
+
+:where(.brand, .brand-line) > :where(img, span) {
+  width: 34px !important;
+  height: 34px !important;
+  flex: 0 0 34px !important;
+  border-radius: 11px !important;
+}
+
+:where(.brand, .brand-line) > strong {
+  display: flex !important;
+  align-items: center !important;
+  height: 34px !important;
+  margin: 0 !important;
+  font-size: 16px !important;
+  line-height: 34px !important;
+  letter-spacing: 0 !important;
+  transform: none !important;
 }
 
 :where(.profile-card, .info-card, .status-card, .location-card, .plan-card, .ai-plan-card, .elder-card, .notice-card, .timeline-card, .summary-card, .list-card, .card) {

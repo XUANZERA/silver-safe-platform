@@ -20,4 +20,5 @@ async function logout() { if (isApiConfigured()) await logoutRequest().catch(() 
 <style scoped>
 .profile-page { width: 100%; max-width: 430px; margin: 0 auto; box-shadow: 0 0 28px rgba(38,26,72,.14); } .elder-nav { left: 50%; right: auto; width: min(100%,430px); transform: translateX(-50%); }
 .logout-button{width:100%;margin-top:10px;padding:13px;color:#e25e66;border:1px solid #f3c7ca;border-radius:22px;background:#fff;font-size:13px}
+.profile-page header > button:first-child { display: none; }
 </style>

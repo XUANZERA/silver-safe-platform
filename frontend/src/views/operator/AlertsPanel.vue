@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { showDialog, showSuccessToast } from 'vant'
 
 const props = defineProps({ alerts: { type: Array, required: true } })
-const emit = defineEmits(['back', 'changed'])
+const emit = defineEmits(['changed'])
 const filter = ref('全部')
 const selected = ref(null)
 const resolution = ref('已联系家属并持续关注')
@@ -33,7 +33,7 @@ function resolveAlert() {
 
 <template>
   <section class="module-page">
-    <header class="module-header"><button type="button" @click="emit('back')"><van-icon name="arrow-left" /></button><div><h1>告警中心</h1><p>及时响应安全风险</p></div></header>
+    <header class="module-header"><div><h1>告警中心</h1><p>及时响应安全风险</p></div></header>
     <div class="filter-tabs"><button v-for="item in filters" :key="item" :class="{ active: filter === item }" type="button" @click="filter = item">{{ item }}</button></div>
     <div class="module-list">
       <article v-for="alert in visibleAlerts" :key="alert.id" class="module-card alert-card">

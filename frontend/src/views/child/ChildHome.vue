@@ -75,4 +75,5 @@ function call() { showDialog({ title: '联系老人', message: '演示环境不�
 .child-header{padding-bottom:24px}
 .child-page main{position:relative;z-index:1}
 .brand span{color:transparent;font-size:0;background:#fff url('/src/assets/logo.png') center/contain no-repeat}
+.brand strong{line-height:1;transform:translateY(3px)}
 </style>

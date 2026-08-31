@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { showConfirmDialog, showSuccessToast } from 'vant'
 const props = defineProps({ trips: { type: Array, required: true } })
-const emit = defineEmits(['back', 'ended'])
+const emit = defineEmits(['ended'])
 const filter = ref('全部')
 const selected = ref(null)
 const locationTrip = ref(null)
@@ -18,7 +18,7 @@ function showLocation(trip) {
 
 <template>
   <section class="module-page">
-    <header class="module-header"><button type="button" @click="emit('back')"><van-icon name="arrow-left" /></button><div><h1>出游管理</h1><p>查看当前行程与安全状态</p></div></header>
+    <header class="module-header"><div><h1>出游管理</h1><p>查看当前行程与安全状态</p></div></header>
     <div class="filter-tabs"><button v-for="item in ['全部','进行中','已完成']" :key="item" :class="{ active: filter === item }" type="button" @click="filter=item">{{ item }}</button></div>
     <div class="trip-list">
       <article v-for="trip in visibleTrips" :key="trip.id" class="trip-card" @click="selected=trip"><div class="trip-head"><span class="avatar">{{ trip.elderName.slice(-1) }}</span><div><strong>{{ trip.elderName }}</strong><p>行程编号 #{{ trip.id }}</p></div><em :class="{ attention: trip.state === '需关注', danger: trip.state === '告警中' }">{{ trip.state }}</em></div><div class="route"><span class="route-dot"></span><div><small>目的地</small><strong>{{ trip.destination }}</strong></div></div><div class="trip-meta"><span>{{ trip.startedAt }} 出发</span><span>{{ trip.duration }}</span><span>{{ trip.status }}</span></div></article>

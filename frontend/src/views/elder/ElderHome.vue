@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 // FIX START: API 失败时向用户展示后端返回的真实错误。
 import { showConfirmDialog, showDialog, showFailToast, showSuccessToast } from 'vant'
 // FIX END: API 失败时向用户展示后端返回的真实错误。
-import { elderApi, isApiConfigured, tripApi } from '../../services/api'
+import { aiApi, elderApi, isApiConfigured, tripApi } from '../../services/api'
 import logo from '../../assets/logo.png'
 
 const router = useRouter()
@@ -15,6 +15,10 @@ const showAiPlan = ref(false)
 // FIX START: 单独保存行程 ID，不能把老人 ID 当成行程 ID。
 const currentTripId = ref(null)
 // FIX END: 单独保存行程 ID。
+const showAiChat = ref(false)
+const aiInput = ref('')
+const aiLoading = ref(false)
+const aiMessages = ref([{ role: 'assistant', text: '您好，我是您的行程小助手。想去哪里，直接告诉我就好。' }])
 const elder = reactive({ id: 1001, name: '张建国', age: 72, family: '张小明', familyPhone: '138****2256', destination: '天坛公园慢游', lastUpdate: '刚刚' })
 const isTripActive = computed(() => tripStatus.value === '出游中')
 
@@ -32,7 +36,9 @@ onMounted(async () => {
   try {
     const list = await elderApi.list()
     const current = list?.items?.[0]
-    if (current) Object.assign(elder, { id: current.id, name: current.name, age: current.age ?? elder.age })
+    // Keep the display profile consistent with the demo account (张建国).
+    // The backend record is still used for authorization and trip data.
+    if (current) Object.assign(elder, { id: current.id, age: current.age ?? elder.age })
     if (elder.id) {
       const trip = await elderApi.currentTrip(elder.id)
       // FIX START: 用后端返回的行程 ID 和状态初始化页面。
@@ -104,6 +110,24 @@ function confirmAiPlan() {
   showSuccessToast('AI 已记住今天的安排')
 }
 
+async function sendAiMessage() {
+  const message = aiInput.value.trim()
+  if (!message || aiLoading.value) return
+  aiMessages.value.push({ role: 'user', text: message })
+  aiInput.value = ''
+  aiLoading.value = true
+  try {
+    if (!isApiConfigured()) throw new Error('API_DISABLED')
+    const result = await aiApi.chat(message, elder.id, elder.name)
+    aiMessages.value.push({ role: 'assistant', text: result.reply })
+  } catch (error) {
+    const fallback = error.message === 'API_DISABLED'
+      ? '演示模式下我可以帮您查看和整理行程。连接后端后，我会根据您的话生成新的安排。'
+      : '现在暂时联系不上小助手，请稍后再试，也可以让家人帮您安排。'
+    aiMessages.value.push({ role: 'assistant', text: fallback })
+  } finally { aiLoading.value = false }
+}
+
 function go(path) { router.push(path) }
 </script>
 
@@ -120,12 +144,13 @@ function go(path) { router.push(path) }
       <!-- FIX START: 给已经实现但没有入口的仿真组件增加可见入口。 -->
       <section class="quick-actions"><button type="button" @click="go('/schedule')"><span class="purple"><van-icon name="todo-list-o" /></span><strong>我的行程</strong><small>查看今天安排</small></button><button type="button" @click="go('/simulation')"><span class="purple"><van-icon name="aim" /></span><strong>定位仿真</strong><small>测试轨迹与围栏告警</small></button><button type="button" @click="emergency"><span class="red"><van-icon name="phone-o" /></span><strong>紧急联系</strong><small>联系家人</small></button></section>
       <!-- FIX END: 给仿真组件增加可见入口。 -->
-      <button class="ai-plan-card" type="button" @click="showAiPlan = true"><span class="ai-badge"><van-icon name="service-o" /></span><div><small>AI 行程管家</small><strong>已经为您安排好今天的行程</strong><p>出发前会提醒您，家人也能同步看到</p></div><van-icon name="arrow" /></button>
+      <button class="ai-plan-card" type="button" @click="showAiChat = true"><span class="ai-badge"><van-icon name="service-o" /></span><div><small>AI 行程管家</small><strong>和小助手说说您的出游想法</strong><p>我会帮您整理安排，确认后再上传</p></div><van-icon name="arrow" /></button>
       <button class="more-button" type="button" @click="showMore = !showMore">{{ showMore ? '收起更多' : '更多信息' }} <van-icon :name="showMore ? 'arrow-up' : 'arrow-down'" /></button>
       <div v-if="showMore" class="more-card"><van-cell title="目的地" :value="elder.destination"/><van-cell title="最后更新" :value="elder.lastUpdate"/><van-cell title="紧急联系人" :value="elder.family"/><van-cell title="联系电话" :value="elder.familyPhone"/></div>
       <p class="privacy-note">演示页面 · 姓名、位置和联系电话均为虚构数据</p>
     </main>
     <van-popup v-model:show="showAiPlan" round position="bottom" :style="{ padding: '20px 16px 24px' }"><div class="ai-plan-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>AI 已为您安排</strong><small>不用操作，我会按时提醒您</small></div></div><div class="ai-timeline"><p><b>08:30</b><span>专车到家</span></p><p><b>09:00</b><span>到达天坛公园，慢慢游览</span></p><p><b>15:30</b><span>专车接您回家</span></p></div><van-button block round type="primary" color="#667eea" @click="confirmAiPlan">好的，我知道了</van-button></div></van-popup>
+    <van-popup v-model:show="showAiChat" round position="bottom" :style="{ padding: '18px 16px 20px' }"><div class="ai-chat-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>行程小助手</strong><small>告诉我想去哪里、什么时候出发</small></div></div><div class="ai-messages"><div v-for="(item, index) in aiMessages" :key="index" :class="['ai-message', item.role]"><span>{{ item.text }}</span></div><div v-if="aiLoading" class="ai-message assistant"><span>正在帮您想一想…</span></div></div><div class="ai-quick"><button type="button" @click="aiInput='帮我安排明天去天坛公园'">安排明天出游</button><button type="button" @click="aiInput='看看我今天的行程'">查看今天行程</button></div><div class="ai-input-row"><van-field v-model="aiInput" clearable placeholder="例如：帮我安排明天出游" @keyup.enter="sendAiMessage"/><van-button round type="primary" color="#667eea" :loading="aiLoading" @click="sendAiMessage">发送</van-button></div><van-button block round plain type="primary" @click="showAiPlan = true; showAiChat = false">查看今日安排</van-button></div></van-popup>
     <nav class="elder-nav"><button class="active" type="button"><van-icon name="home-o"/><small>首页</small></button><button type="button" @click="go('/schedule')"><van-icon name="todo-list-o"/><small>行程</small></button><button type="button" @click="go('/elder/profile')"><van-icon name="manager-o"/><small>我的</small></button></nav>
   </div>
 </template>
@@ -147,4 +172,16 @@ function go(path) { router.push(path) }
 <style scoped>
 .elder-header { z-index: 0; }
 .elder-content { position: relative; z-index: 1; }
+</style>
+<style scoped>
+.brand strong { line-height: 1; transform: translateY(3px); }
+</style>
+<style scoped>
+.ai-chat-popup { color: #323233; }
+.ai-messages { display: grid; gap: 8px; max-height: 240px; overflow-y: auto; margin: 16px 0 10px; padding: 4px 2px; }
+.ai-message { display: flex; font-size: 12px; line-height: 1.55; }
+.ai-message span { max-width: 86%; padding: 8px 11px; border-radius: 12px; background: #f2f0fa; }
+.ai-message.user { justify-content: flex-end; }.ai-message.user span { color: white; background: #667eea; }
+.ai-quick { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 9px; }.ai-quick button { flex: none; padding: 7px 10px; color: #6657a5; border: 1px solid #e1dcf3; border-radius: 14px; background: #faf9fe; font-size: 10px; }
+.ai-input-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }.ai-input-row :deep(.van-cell) { flex: 1; padding: 8px 10px; border-radius: 20px; background: #f5f5f5; }.ai-input-row .van-button { width: 58px; height: 36px; padding: 0; font-size: 11px; }
 </style>

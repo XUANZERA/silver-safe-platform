@@ -1,6 +1,6 @@
 <template>
   <div class="elderly-schedule-container">
-    <header class="app-header"><div class="brand"><span>银</span><strong>银发独游</strong></div><small>安心出游，家人守护</small></header>
+    <header class="app-header"><div class="brand"><img class="brand-logo" :src="logo" alt="星斗守眼安游"/><strong>银发独游</strong></div><small>安心出游，家人守护</small></header>
     <!-- 页面标题 -->
     <header class="schedule-header">
       <button class="back-button" type="button" @click="router.push(homePath)"><van-icon name="arrow-left" /></button>
@@ -56,6 +56,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { showDialog, showSuccessToast } from 'vant'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
+import logo from '../../assets/logo.png'
 import { elderApi, isApiConfigured } from '../../services/api'
 const router = useRouter()
 const userStore = useUserStore()
@@ -277,7 +278,8 @@ const showEmergencyInfo = () => {
 .emergency-fab{position:static;width:100%;display:flex;align-items:center;justify-content:center;gap:7px;margin:4px 0 16px;padding:12px;color:#e25e66;border:1px solid #f3c7ca;border-radius:22px;background:#fff;font-size:13px;font-weight:600;box-shadow:none}.emergency-fab:hover{transform:none}.elder-nav{left:50%;right:auto;width:min(100%,430px);height:62px;transform:translateX(-50%)}
 </style>
 <style scoped>
-.app-header .brand span{color:transparent;background:#fff url('/src/assets/logo.png') center/contain no-repeat}
+.app-header .brand-logo{width:34px;height:34px;object-fit:contain;border-radius:11px;background:#fff}
+.app-header .brand strong{line-height:1;transform:translateY(3px)}
 </style>
 <style scoped>
 .edit-button{position:absolute;right:0;top:5px;padding:7px 10px;color:#6657a5;border:0;border-radius:16px;background:#efecfa;font-size:12px}.time-input{width:50px;padding:6px 4px;color:#6657a5;border:1px solid #d8d1ef;border-radius:8px;background:#fff;font-size:12px;text-align:center;outline:none}.edit-fields{display:grid;gap:8px}.edit-fields input,.edit-fields textarea{width:100%;padding:10px;color:#323233;border:1px solid #e3e0e8;border-radius:9px;background:#fafafa;font:inherit;font-size:12px;outline:none;resize:none}.edit-fields input:focus,.edit-fields textarea:focus,.time-input:focus{border-color:#7b6bb5;background:#fff}.edit-fields button{justify-self:end;padding:5px 0;color:#dc666d;border:0;background:transparent;font-size:10px}.edit-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin:4px 0 14px}.edit-actions button{padding:12px;color:#6657a5;border:1px solid #d8d1ef;border-radius:22px;background:#fff;font-size:12px}.edit-actions .save{color:#fff;border-color:#667eea;background:linear-gradient(135deg,#667eea,#764ba2);font-weight:600}

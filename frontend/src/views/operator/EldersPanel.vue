@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { showDialog } from 'vant'
 const props = defineProps({ elders: { type: Array, required: true } })
-const emit = defineEmits(['back', 'show-trips'])
+const emit = defineEmits(['show-trips'])
 const query = ref('')
 const selected = ref(null)
 const visibleElders = computed(() => props.elders.filter((elder) => [elder.name, elder.phone, elder.family].some((value) => value.includes(query.value.trim()))))
@@ -19,7 +19,7 @@ function showTrips() {
 
 <template>
   <section class="module-page">
-    <header class="module-header"><button type="button" @click="emit('back')"><van-icon name="arrow-left" /></button><div><h1>老人档案</h1><p>共 {{ elders.length }} 位演示老人</p></div></header>
+    <header class="module-header"><div><h1>老人档案</h1><p>共 {{ elders.length }} 位演示老人</p></div></header>
     <div class="search-wrap"><van-search v-model="query" shape="round" placeholder="搜索姓名、电话或家属" /></div>
     <div class="elder-list">
       <button v-for="elder in visibleElders" :key="elder.id" class="elder-card" type="button" @click="selected = elder"><span class="avatar">{{ elder.name.slice(-1) }}</span><div><strong>{{ elder.name }} <small>{{ elder.gender }} · {{ elder.age }} 岁</small></strong><p><van-icon name="location-o" />{{ elder.lastLocation }}</p><small>{{ elder.updatedAt }} · 家属 {{ elder.family }}</small></div><em :class="{ danger: elder.status === '告警中', attention: elder.status === '需关注' }">{{ elder.status }}</em><van-icon name="arrow" /></button>

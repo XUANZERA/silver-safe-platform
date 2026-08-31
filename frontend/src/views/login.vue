@@ -43,7 +43,22 @@ const onSubmit = async () => {
     userStore.setUserInfo(account)
     showSuccessToast('登录成功')
     await router.push(account.path)
-  } catch {
+  } catch (error) {
+    // Keep the three local demo accounts usable when the temporary backend
+    // tunnel is unavailable; real credentials are never accepted here.
+    const demoAccounts = {
+      operator01: { id: 9001, username: 'operator01', displayName: '林晓岚', role: 'operator', phone: '188****2608', path: '/operator' },
+      elder01: { id: 1001, username: 'elder01', displayName: '张建国', role: 'elder', phone: '138****4031', path: '/elder' },
+      child01: { id: 2001, username: 'child01', displayName: '张小明', role: 'family', phone: '138****2256', path: '/child' },
+    }
+    const account = demoAccounts[formData.username]
+    const networkFailure = /fetch|网络|请求失败|服务不可用/i.test(error?.message || '')
+    if (isApiConfigured() && networkFailure && account && formData.password === 'demo123') {
+      userStore.setUserInfo(account)
+      showSuccessToast('演示登录成功（后端暂时不可用）')
+      await router.push(account.path)
+      return
+    }
     showFailToast('演示账号或密码不正确')
   } finally {
     loading.value = false

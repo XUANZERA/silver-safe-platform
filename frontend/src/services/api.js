@@ -63,6 +63,10 @@ export const alertApi = {
   sos: (tripId) => request('/alerts/sos', { method: 'POST', body: JSON.stringify({ trip_id: tripId }) })
 }
 
+export const aiApi = {
+  chat: (message, elderId, elderName) => request('/ai/chat', { method: 'POST', body: JSON.stringify({ message, elder_id: elderId, elder_name: elderName }) })
+}
+
 export const locationApi = {
   latest: (tripId) => request(`/trips/${tripId}/locations/latest`),
   track: (tripId, limit = 500) => request(`/trips/${tripId}/locations?limit=${limit}`),
