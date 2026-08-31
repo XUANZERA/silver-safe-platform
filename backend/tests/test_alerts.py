@@ -349,9 +349,10 @@ def test_openapi_contains_only_expected_alert_operations(client: TestClient) -> 
     assert f"{API}/alerts/{{alert_id}}" in paths
     assert f"{API}/alerts/{{alert_id}}/accept" in paths
     assert f"{API}/alerts/{{alert_id}}/resolve" in paths
+    assert f"{API}/ai/chat" in paths
     operations = sum(
         method in {"get", "post", "put", "patch", "delete"}
         for path in paths.values()
         for method in path
     )
-    assert operations == 23
+    assert operations == 24
