@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { showConfirmDialog, showDialog, showSuccessToast } from 'vant'
+// FIX START: API 失败时向用户展示后端返回的真实错误。
+import { showConfirmDialog, showDialog, showFailToast, showSuccessToast } from 'vant'
+// FIX END: API 失败时向用户展示后端返回的真实错误。
 import { elderApi, isApiConfigured, tripApi } from '../../services/api'
 import logo from '../../assets/logo.png'
 
@@ -10,6 +12,9 @@ const tripStatus = ref('出游中')
 const locationStatus = ref('定位正常')
 const showMore = ref(false)
 const showAiPlan = ref(false)
+// FIX START: 单独保存行程 ID，不能把老人 ID 当成行程 ID。
+const currentTripId = ref(null)
+// FIX END: 单独保存行程 ID。
 const elder = reactive({ id: 1001, name: '张建国', age: 72, family: '张小明', familyPhone: '138****2256', destination: '天坛公园慢游', lastUpdate: '刚刚' })
 const isTripActive = computed(() => tripStatus.value === '出游中')
 
@@ -21,26 +26,64 @@ onMounted(async () => {
     if (current) Object.assign(elder, { id: current.id, name: current.name, age: current.age ?? elder.age })
     if (elder.id) {
       const trip = await elderApi.currentTrip(elder.id)
-      if (trip) Object.assign(elder, { destination: trip.destination })
+      // FIX START: 用后端返回的行程 ID 和状态初始化页面。
+      if (trip) {
+        currentTripId.value = trip.id
+        Object.assign(elder, { destination: trip.destination })
+        tripStatus.value = trip.status === 'active' ? '出游中' : '待出发'
+        locationStatus.value = trip.status === 'active' ? '定位正常' : '定位已暂停'
+      } else {
+        currentTripId.value = null
+        tripStatus.value = '已返程'
+        locationStatus.value = '已停止定位'
+      }
+      // FIX END: 用后端返回的行程 ID 和状态初始化页面。
     }
   } catch (error) { console.warn('老人端数据加载失败，使用演示数据', error) }
 })
 
+// FIX START: 开始/结束行程时调用真实 API，并始终传递 trip.id。
 async function toggleTrip() {
   if (isTripActive.value) {
     try {
       await showConfirmDialog({ title: '结束本次出游？', message: '确认已经安全回到家了吗？' })
-      if (isApiConfigured()) await tripApi.end(elder.id).catch(() => null)
+    } catch {
+      return
+    }
+
+    try {
+      if (isApiConfigured()) {
+        if (!currentTripId.value) throw new Error('没有可结束的行程')
+        await tripApi.end(currentTripId.value)
+        currentTripId.value = null
+      }
       tripStatus.value = '已返程'
       locationStatus.value = '已停止定位'
       showSuccessToast('出游已结束，辛苦了')
-    } catch { /* 用户取消 */ }
+    } catch (error) {
+      showFailToast(error instanceof Error ? error.message : '结束行程失败')
+    }
     return
   }
-  tripStatus.value = '出游中'
-  locationStatus.value = '定位正常'
-  showSuccessToast('已开始出游，家人可以看到您的位置')
+
+  try {
+    if (isApiConfigured()) {
+      let tripId = currentTripId.value
+      if (!tripId) {
+        const createdTrip = await tripApi.create(elder.destination)
+        tripId = createdTrip.id
+      }
+      const startedTrip = await tripApi.start(tripId)
+      currentTripId.value = startedTrip.id
+    }
+    tripStatus.value = '出游中'
+    locationStatus.value = '定位正常'
+    showSuccessToast('已开始出游，家人可以看到您的位置')
+  } catch (error) {
+    showFailToast(error instanceof Error ? error.message : '开始行程失败')
+  }
 }
+// FIX END: 开始/结束行程时调用真实 API，并始终传递 trip.id。
 
 function emergency() {
   showDialog({ title: '紧急联系', message: `将联系您的家人：${elder.family}\n电话：${elder.familyPhone}\n\n这是演示操作，不会拨打真实电话。`, confirmButtonText: '知道了' })
@@ -59,10 +102,14 @@ function go(path) { router.push(path) }
     <header class="elder-header"><div class="brand"><img class="brand-logo" :src="logo" alt="星斗守眼安游"/><strong>银发独游</strong></div><button type="button" aria-label="个人信息" @click="go('/elder/profile')"><van-icon name="manager-o" /></button><p>您好，{{ elder.name }}</p><small>{{ elder.age }} 岁 · 家人守护中</small></header>
     <main class="elder-content">
       <section class="status-card"><div class="status-icon"><van-icon :name="isTripActive ? 'location-o' : 'home-o'" /></div><div><small>当前状态</small><strong>{{ tripStatus }}</strong><p v-if="isTripActive">正在前往：{{ elder.destination }}</p><p v-else>欢迎回家，今天辛苦了</p></div><span :class="['status-dot', { off: !isTripActive }]" /></section>
-      <section class="location-card"><div><small>我的位置</small><strong>{{ isTripActive ? '定位正常' : '定位已暂停' }}</strong><p>{{ isTripActive ? '家人可以看到您的最新位置' : '开始出游后将自动开启定位' }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
+      <!-- FIX START: 显示脚本中随 API 行程状态更新的 locationStatus。 -->
+      <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p>{{ isTripActive ? '家人可以看到您的最新位置' : '开始出游后将自动开启定位' }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
+      <!-- FIX END: 显示真实的 locationStatus。 -->
       <button class="plan-card" type="button" @click="go('/schedule')"><div class="plan-title"><div><small>今日出游计划</small><strong>天坛公园慢游</strong></div><van-icon name="arrow" /></div><div class="plan-row"><span><b>08:30</b><small>专车到家</small></span><i></i><span><b>09:00</b><small>到达公园</small></span><i></i><span><b>15:30</b><small>专车回家</small></span></div><p><van-icon name="info-o" /> 沿平整步道游览，途中有休息区</p></button>
       <button class="main-action" type="button" @click="toggleTrip"><van-icon :name="isTripActive ? 'stop-circle-o' : 'play-circle-o'" /><span>{{ isTripActive ? '结束本次出游' : '开始出游' }}</span><small>{{ isTripActive ? '确认安全到家后点击' : '点击后家人可以看到您的位置' }}</small></button>
-      <section class="quick-actions"><button type="button" @click="go('/schedule')"><span class="purple"><van-icon name="todo-list-o" /></span><strong>我的行程</strong><small>查看今天安排</small></button><button type="button" @click="emergency"><span class="red"><van-icon name="phone-o" /></span><strong>紧急联系</strong><small>联系家人</small></button></section>
+      <!-- FIX START: 给已经实现但没有入口的仿真组件增加可见入口。 -->
+      <section class="quick-actions"><button type="button" @click="go('/schedule')"><span class="purple"><van-icon name="todo-list-o" /></span><strong>我的行程</strong><small>查看今天安排</small></button><button type="button" @click="go('/simulation')"><span class="purple"><van-icon name="aim" /></span><strong>定位仿真</strong><small>测试轨迹与围栏告警</small></button><button type="button" @click="emergency"><span class="red"><van-icon name="phone-o" /></span><strong>紧急联系</strong><small>联系家人</small></button></section>
+      <!-- FIX END: 给仿真组件增加可见入口。 -->
       <button class="ai-plan-card" type="button" @click="showAiPlan = true"><span class="ai-badge"><van-icon name="service-o" /></span><div><small>AI 行程管家</small><strong>已经为您安排好今天的行程</strong><p>出发前会提醒您，家人也能同步看到</p></div><van-icon name="arrow" /></button>
       <button class="more-button" type="button" @click="showMore = !showMore">{{ showMore ? '收起更多' : '更多信息' }} <van-icon :name="showMore ? 'arrow-up' : 'arrow-down'" /></button>
       <div v-if="showMore" class="more-card"><van-cell title="目的地" :value="elder.destination"/><van-cell title="最后更新" :value="elder.lastUpdate"/><van-cell title="紧急联系人" :value="elder.family"/><van-cell title="联系电话" :value="elder.familyPhone"/></div>

@@ -10,7 +10,9 @@ async function request(path, options = {}, retry = true) {
     try { await refreshSession(); return request(path, options, false) } catch { /* fall through */ }
   }
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload?.message || payload?.detail || '请求失败')
+  // FIX START: 读取后端统一错误结构中的真实错误消息。
+  if (!response.ok) throw new Error(payload?.error?.message || payload?.message || payload?.detail || '请求失败')
+  // FIX END: 读取后端统一错误结构中的真实错误消息。
   return payload.data ?? payload
 }
 

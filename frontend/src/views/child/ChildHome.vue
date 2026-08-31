@@ -20,23 +20,32 @@ onMounted(async () => {
     }
   } catch (error) { console.warn('子女端数据加载失败，使用演示数据', error) }
 })
-function locate() {
-  if (!navigator.geolocation) { showDialog({ title: '暂不支持定位', message: '当前浏览器不支持设备定位，将继续显示演示位置。' }); return }
-  navigator.geolocation.getCurrentPosition((position) => {
-    elder.location = `${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`
-    elder.update = '刚刚（设备定位）'
-    showSuccessToast('已获取当前位置')
-  }, () => showDialog({ title: '无法获取位置', message: '请允许浏览器使用定位权限，或检查设备定位是否已开启。' }), { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 })
-}
+// FIX START: 家属端只能读取老人后端定位，不能用家属设备定位覆盖老人位置。
 async function refresh() {
-  if (isApiConfigured() && elder.tripId) {
-    try {
-      const latest = await locationApi.latest(elder.tripId)
-      if (latest?.location) Object.assign(elder, { location: `${latest.location.latitude.toFixed(5)}, ${latest.location.longitude.toFixed(5)}`, update: new Date(latest.location.recorded_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
-    } catch (error) { console.warn('位置更新失败', error) }
+  if (!isApiConfigured()) {
+    elder.update = '刚刚（演示数据）'
+    showSuccessToast('演示位置已刷新')
+    return
   }
-  locate()
+
+  if (!elder.tripId) {
+    showDialog({ title: '暂无进行中的行程', message: '老人开始出游后，这里会显示后端上传的最新位置。' })
+    return
+  }
+
+  try {
+    const latest = await locationApi.latest(elder.tripId)
+    if (!latest?.location) {
+      showDialog({ title: '暂无定位数据', message: '行程已建立，但后端还没有收到老人定位。' })
+      return
+    }
+    Object.assign(elder, { location: `${latest.location.latitude.toFixed(5)}, ${latest.location.longitude.toFixed(5)}`, update: new Date(latest.location.recorded_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    showSuccessToast('老人位置已刷新')
+  } catch (error) {
+    showDialog({ title: '位置更新失败', message: error instanceof Error ? error.message : '无法读取老人最新位置' })
+  }
 }
+// FIX END: 家属端只读取老人后端定位。
 function call() { showDialog({ title: '联系老人', message: '演示环境不会拨打真实电话。', confirmButtonText: '知道了' }) }
 </script>
 <template>
