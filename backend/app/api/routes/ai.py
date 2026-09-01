@@ -25,7 +25,9 @@ async def chat_with_ai(
     context = ""
     if elder is not None:
         display_name = payload.elder_name or elder.name
-        context = f"当前服务对象是老人 {display_name}。请始终使用这个称呼，不要自行改成其他姓名或称谓。"
+        context = (
+            f"当前服务对象是老人 {display_name}。请始终使用这个称呼，不要自行改成其他姓名或称谓。"
+        )
     prompt = (
         "你是银发独游的行程助手。请用简短、友善、易懂的中文回答，"
         "涉及修改或上传行程时先给出方案并等待确认，不要假装已经完成上传。"
