@@ -1,5 +1,6 @@
 """Pydantic request and response schemas."""
 
+from app.schemas.alert import AlertResponse, AlertStatus, AlertType, SosRequest
 from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
@@ -17,6 +18,9 @@ from app.schemas.trip import TripCancelRequest, TripCreateRequest, TripResponse,
 
 __all__ = [
     "ApiResponse",
+    "AlertResponse",
+    "AlertStatus",
+    "AlertType",
     "ElderListResponse",
     "ElderResponse",
     "GeofenceResponse",
@@ -25,6 +29,7 @@ __all__ = [
     "LocationCreateRequest",
     "LocationResponse",
     "LocationSource",
+    "SosRequest",
     "TripCancelRequest",
     "TripCreateRequest",
     "TripResponse",

@@ -37,7 +37,25 @@ class Alert(Base):
             "(latitude IS NOT NULL AND longitude IS NOT NULL)",
             name="ck_alerts_coordinate_pair",
         ),
-        Index("ix_alerts_elder_occurred", "elder_id", "occurred_at"),
+        CheckConstraint(
+            "("
+            "status = 'new' AND handler_id IS NULL AND accepted_at IS NULL "
+            "AND resolution IS NULL AND resolved_at IS NULL"
+            ") OR ("
+            "status = 'processing' AND handler_id IS NOT NULL "
+            "AND accepted_at IS NOT NULL AND resolution IS NULL "
+            "AND resolved_at IS NULL"
+            ") OR ("
+            "status = 'resolved' AND handler_id IS NOT NULL "
+            "AND accepted_at IS NOT NULL AND resolution IS NOT NULL "
+            "AND resolved_at IS NOT NULL"
+            ")",
+            name="ck_alerts_state_fields",
+        ),
+        Index("ix_alerts_occurred", "occurred_at"),
+        Index("ix_alerts_status_occurred", "status", "occurred_at"),
+        Index("ix_alerts_status_type_occurred", "status", "type", "occurred_at"),
+        Index("ix_alerts_elder_status_occurred", "elder_id", "status", "occurred_at"),
         Index("ix_alerts_trip_type_status", "trip_id", "type", "status"),
     )
 

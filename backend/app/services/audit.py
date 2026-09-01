@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.errors import AppError
 from app.models.security import AuditLog
 
 
@@ -58,8 +59,7 @@ def add_audit_log(
     return log
 
 
-def count_recent_audit_events(
-    db: Session,
+def _recent_audit_filters(
     *,
     action: str,
     window_seconds: int,
@@ -68,7 +68,7 @@ def count_recent_audit_events(
     ip_address: str | None = None,
     resource_type: str | None = None,
     resource_id: str | None = None,
-) -> int:
+) -> list[object]:
     cutoff = datetime.now(UTC) - timedelta(seconds=window_seconds)
     filters = [AuditLog.action == action, AuditLog.occurred_at >= cutoff]
     if outcome is not None:
@@ -81,4 +81,67 @@ def count_recent_audit_events(
         filters.append(AuditLog.resource_type == resource_type)
     if resource_id is not None:
         filters.append(AuditLog.resource_id == resource_id)
+    return filters
+
+
+def count_recent_audit_events(db: Session, **criteria: object) -> int:
+    filters = _recent_audit_filters(**criteria)
     return db.scalar(select(func.count(AuditLog.id)).where(*filters)) or 0
+
+
+def has_recent_audit_event(db: Session, **criteria: object) -> bool:
+    filters = _recent_audit_filters(**criteria)
+    return db.scalar(select(AuditLog.id).where(*filters).limit(1)) is not None
+
+
+def begin_sos_audit(
+    db: Session,
+    *,
+    actor_user_id: int,
+    ip_address: str | None,
+) -> AuditLog:
+    """Create and rate-check one SOS attempt inside the caller's lock."""
+    settings = get_settings()
+    log = add_audit_log(
+        db,
+        action="sos.request",
+        outcome="pending",
+        actor_user_id=actor_user_id,
+        ip_address=ip_address,
+    )
+    db.flush()
+
+    user_count = count_recent_audit_events(
+        db,
+        action="sos.request",
+        window_seconds=settings.sos_rate_limit_window_seconds,
+        actor_user_id=actor_user_id,
+    )
+    ip_count = (
+        count_recent_audit_events(
+            db,
+            action="sos.request",
+            window_seconds=settings.sos_rate_limit_window_seconds,
+            ip_address=ip_address,
+        )
+        if ip_address
+        else 0
+    )
+    if user_count > settings.sos_rate_limit_per_user or ip_count > settings.sos_rate_limit_per_ip:
+        log.outcome = "blocked"
+        log.details = json.dumps(
+            {
+                "user_count": user_count,
+                "ip_count": ip_count,
+                "window_seconds": settings.sos_rate_limit_window_seconds,
+            },
+            separators=(",", ":"),
+        )
+        db.commit()
+        raise AppError(
+            429,
+            "SOS 请求过于频繁，请稍后再试",
+            "SOS_RATE_LIMITED",
+            headers={"Retry-After": str(settings.sos_rate_limit_window_seconds)},
+        )
+    return log

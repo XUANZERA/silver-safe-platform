@@ -21,6 +21,12 @@
 | POST | `/trips/{trip_id}/locations` | 幂等上传定位并检测连续越界 |
 | GET | `/trips/{trip_id}/locations/latest` | 获取最新定位 |
 | GET | `/trips/{trip_id}/locations` | 获取最近一段有序轨迹 |
+| POST | `/alerts/sos` | 老人为当前出游发起紧急求助 |
+| GET | `/elders/{elder_id}/alerts` | 查询可访问老人的告警 |
+| GET | `/alerts` | 运营人员分页查询告警队列 |
+| GET | `/alerts/{alert_id}` | 查询告警详情及处置记录 |
+| PATCH | `/alerts/{alert_id}/accept` | 运营人员接单 |
+| PATCH | `/alerts/{alert_id}/resolve` | 当前处理人完成处置 |
 
 完整请求和响应示例见 [`docs/auth-api.md`](../docs/auth-api.md)。
 
@@ -75,8 +81,8 @@ http://127.0.0.1:8000/api/v1
 Authorization: Bearer <access_token>
 ```
 
-刷新令牌保存在 HttpOnly Cookie 中，前端不应读取或存入
-`localStorage`。Axios 请求需要允许携带 Cookie：
+访问令牌只保存在前端运行内存中，不写入 `localStorage`；刷新令牌保存在
+HttpOnly Cookie 中，前端无法读取。Axios 请求需要允许携带 Cookie：
 
 ```js
 import axios from "axios"
@@ -124,6 +130,18 @@ const mapPoint = {
 和 `to_time` 过滤。定位响应带有 `Cache-Control: no-store`，前端不应持久缓存精确
 轨迹。
 
+### SOS 与告警状态
+
+SOS 只允许老人账号为自己的 active 出游发起；没有定位时仍会立即创建事件，坐标
+返回 `null`。同一老人 30 秒内的重复请求返回同一个事件，首次响应 HTTP 201，
+幂等重复响应 HTTP 200。默认每个老人账号 60 秒最多请求 3 次、每个来源 IP 最多
+10 次，超限返回 `429 SOS_RATE_LIMITED` 和 `Retry-After`。
+
+告警状态严格按 `new -> processing -> resolved` 流转。接单和处置使用数据库条件
+更新，多名运营人员并发接单时只有一人成功；同一处理人因网络重试而重复提交相同
+操作时返回当前结果，不会重复写入处置日志。老人和家属只能读取本人或绑定老人的
+事件，运营接口仍由后端角色权限控制。
+
 ## 运行测试
 
 ```powershell
@@ -147,6 +165,10 @@ python -m ruff format --check backend
 定位上传默认每个出游 60 秒最多 120 个新点；幂等重试不重复保存，超过频率返回
 `429 LOCATION_RATE_LIMITED` 和 `Retry-After`。生产接入真实老人数据前，仍需完成
 HTTPS、定位数据静态加密、细粒度运营权限和集中审计建设。
+
+SOS 与告警参数可通过 `SOS_*` 和 `ALERT_READ_AUDIT_WINDOW_SECONDS` 调整。敏感
+告警读取会写入审计日志，但同一用户对同一资源的频繁轮询在时间窗口内只记录一次，
+避免审计写入影响告警看板性能。多实例正式部署仍应在网关增加集中限流。
 
 接口时间字段统一使用 snake_case，例如 `created_at`、`started_at` 和
 `ended_at`。后端以 UTC 存储并返回 RFC 3339 格式（例如

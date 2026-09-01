@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from threading import Barrier
 
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal, engine
@@ -322,6 +322,17 @@ def test_location_queries_have_required_composite_indexes() -> None:
     indexes = {item["name"] for item in inspect(engine).get_indexes("locations")}
     assert "ix_locations_trip_recorded" in indexes
     assert "ix_locations_trip_received" in indexes
+
+    with engine.connect() as connection:
+        rate_limit_plan = connection.execute(
+            text(
+                "EXPLAIN QUERY PLAN SELECT id FROM locations "
+                "WHERE trip_id = 1 AND received_at >= '2026-01-01' "
+                "ORDER BY received_at DESC LIMIT 1 OFFSET 119"
+            )
+        ).all()
+    plan_text = " ".join(str(column) for row in rate_limit_plan for column in row)
+    assert "ix_locations_trip_received" in plan_text
 
 
 def test_concurrent_idempotent_retries_create_one_location(client: TestClient) -> None:

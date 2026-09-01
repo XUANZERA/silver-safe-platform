@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -53,16 +53,17 @@ def _lock_active_trip(db: Session, trip_id: int) -> None:
 def _enforce_upload_rate_limit(db: Session, trip_id: int) -> None:
     settings = get_settings()
     cutoff = datetime.now(UTC) - timedelta(seconds=settings.location_upload_window_seconds)
-    count = (
-        db.scalar(
-            select(func.count(Location.id)).where(
-                Location.trip_id == trip_id,
-                Location.received_at >= cutoff,
-            )
+    limit_reached = db.scalar(
+        select(Location.id)
+        .where(
+            Location.trip_id == trip_id,
+            Location.received_at >= cutoff,
         )
-        or 0
+        .order_by(Location.received_at.desc())
+        .offset(settings.location_upload_per_trip - 1)
+        .limit(1)
     )
-    if count >= settings.location_upload_per_trip:
+    if limit_reached is not None:
         db.rollback()
         raise AppError(
             429,
