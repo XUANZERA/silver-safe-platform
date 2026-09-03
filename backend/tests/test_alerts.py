@@ -125,6 +125,24 @@ def test_alert_must_be_accepted_before_resolution(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "ALERT_NOT_ACCEPTED"
 
 
+def test_tc_sos_002_requires_an_active_trip(client: TestClient) -> None:
+    elder_headers = headers(client, "elder01")
+    trip = client.post(
+        f"{API}/trips",
+        json={"destination": "人民公园"},
+        headers=elder_headers,
+    ).json()["data"]
+
+    response = client.post(
+        f"{API}/alerts/sos",
+        json={"trip_id": trip["id"]},
+        headers=elder_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "NO_ACTIVE_TRIP"
+
+
 def test_sos_rate_limit_blocks_fourth_request_with_retry_after(client: TestClient) -> None:
     trip_id, _ = create_active_trip(client)
     elder_headers = headers(client, "elder01")
@@ -350,9 +368,10 @@ def test_openapi_contains_only_expected_alert_operations(client: TestClient) -> 
     assert f"{API}/alerts/{{alert_id}}/accept" in paths
     assert f"{API}/alerts/{{alert_id}}/resolve" in paths
     assert f"{API}/ai/chat" in paths
+    assert f"{API}/elders/{{elder_id}}/safety" in paths
     operations = sum(
         method in {"get", "post", "put", "patch", "delete"}
         for path in paths.values()
         for method in path
     )
-    assert operations == 24
+    assert operations == 25

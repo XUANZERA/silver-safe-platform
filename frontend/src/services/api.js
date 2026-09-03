@@ -1,37 +1,68 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-let accessToken = ''
+const API_BASE = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
-async function request(path, options = {}, retry = true) {
-  if (!API_BASE) throw new Error('API_DISABLED')
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: 'include' })
-  if (response.status === 401 && retry && path !== '/auth/refresh') {
-    try { await refreshSession(); return request(path, options, false) } catch { /* fall through */ }
+export function createApiClient({ baseUrl, fetchImpl = (...args) => globalThis.fetch(...args) }) {
+  let accessToken = ''
+  let refreshPromise = null
+
+  async function request(path, options = {}, retry = true) {
+    if (!baseUrl) throw new Error('API_DISABLED')
+    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+    const response = await fetchImpl(`${baseUrl}${path}`, { ...options, headers, credentials: 'include' })
+    if (response.status === 401 && retry && path !== '/auth/refresh') {
+      try {
+        await refreshSession()
+        return request(path, options, false)
+      } catch {
+        // Preserve the original request failure when the shared refresh fails.
+      }
+    }
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload?.error?.message || payload?.message || payload?.detail || '请求失败')
+    return Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
   }
-  const payload = await response.json().catch(() => ({}))
-  // FIX START: 读取后端统一错误结构中的真实错误消息。
-  if (!response.ok) throw new Error(payload?.error?.message || payload?.message || payload?.detail || '请求失败')
-  // FIX END: 读取后端统一错误结构中的真实错误消息。
-  // FIX START: 后端 data=null 代表“没有数据”，不能退回整个响应包装对象。
-  return Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
-  // FIX END: 正确保留后端返回的 null 数据。
+
+  async function performRefresh() {
+    const data = await request('/auth/refresh', { method: 'POST' }, false)
+    accessToken = data.access_token
+    return data.user
+  }
+
+  function refreshSession() {
+    if (!refreshPromise) {
+      refreshPromise = performRefresh().finally(() => {
+        refreshPromise = null
+      })
+    }
+    return refreshPromise
+  }
+
+  async function loginRequest(username, password) {
+    const data = await request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }, false)
+    accessToken = data.access_token
+    return data.user
+  }
+
+  async function logoutRequest() {
+    try { await request('/auth/logout', { method: 'POST' }, false) } finally { accessToken = '' }
+  }
+
+  return { loginRequest, logoutRequest, refreshSession, request }
 }
 
+const apiClient = createApiClient({ baseUrl: API_BASE })
+const request = apiClient.request
+
 export async function loginRequest(username, password) {
-  const data = await request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }, false)
-  accessToken = data.access_token
-  return data.user
+  return apiClient.loginRequest(username, password)
 }
 
 export async function refreshSession() {
-  const data = await request('/auth/refresh', { method: 'POST' }, false)
-  accessToken = data.access_token
-  return data.user
+  return apiClient.refreshSession()
 }
 
 export async function logoutRequest() {
-  try { await request('/auth/logout', { method: 'POST' }, false) } finally { accessToken = '' }
+  return apiClient.logoutRequest()
 }
 
 export const api = {
@@ -45,6 +76,7 @@ export const elderApi = {
   list: () => request('/elders'),
   detail: (elderId) => request(`/elders/${elderId}`),
   geofence: (elderId) => request(`/elders/${elderId}/geofence`),
+  safety: (elderId) => request(`/elders/${elderId}/safety`),
   currentTrip: (elderId) => request(`/elders/${elderId}/current-trip`),
   alerts: (elderId, status) => request(`/elders/${elderId}/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`)
 }
