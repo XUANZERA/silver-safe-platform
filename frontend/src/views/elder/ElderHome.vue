@@ -4,25 +4,34 @@ import { useRouter } from 'vue-router'
 // FIX START: API 失败时向用户展示后端返回的真实错误。
 import { showConfirmDialog, showDialog, showFailToast, showSuccessToast } from 'vant'
 // FIX END: API 失败时向用户展示后端返回的真实错误。
-import { aiApi, elderApi, isApiConfigured, tripApi } from '../../services/api'
+import { aiApi, alertApi, elderApi, isApiConfigured, tripApi } from '../../services/api'
+import { presentElderTripActionHint } from '../../services/modePresentation'
+import { presentSosFailure, presentSosSuccess, runSosSubmission } from '../../services/sosPresentation'
 import logo from '../../assets/logo.png'
 
 const router = useRouter()
-const tripStatus = ref('出游中')
-const locationStatus = ref('定位正常')
+const realMode = isApiConfigured()
+const tripStatus = ref(realMode ? '状态获取中' : '出游中')
+const locationStatus = ref(realMode ? '定位状态待同步' : '模拟定位正常')
 const showMore = ref(false)
 const showAiPlan = ref(false)
 // FIX START: 单独保存行程 ID，不能把老人 ID 当成行程 ID。
 const currentTripId = ref(null)
+const currentTripBackendStatus = ref(realMode ? null : 'active')
+const tripDataAvailable = ref(!realMode)
+const sosSending = ref(false)
+const sosResult = ref('')
 // FIX END: 单独保存行程 ID。
 const showAiChat = ref(false)
 const aiInput = ref('')
 const aiLoading = ref(false)
 const aiMessages = ref([{ role: 'assistant', text: '您好，我是您的行程小助手。想去哪里，直接告诉我就好。' }])
-const elder = reactive({ id: 1001, name: '张建国', age: 72, family: '张小明', familyPhone: '138****2256', destination: '天坛公园慢游', lastUpdate: '刚刚' })
-const isTripActive = computed(() => tripStatus.value === '出游中')
+const elder = reactive({ id: realMode ? null : 1001, name: realMode ? '老人' : '张建国', age: realMode ? '--' : 72, family: realMode ? '已绑定家属' : '张小明', familyPhone: realMode ? '请在个人资料中查看' : '138****2256', destination: realMode ? '暂无行程' : '天坛公园慢游', lastUpdate: realMode ? '尚未同步' : '刚刚' })
+const isTripActive = computed(() => currentTripBackendStatus.value === 'active')
+const tripActionHint = computed(() => presentElderTripActionHint(realMode, isTripActive.value))
 
 function applySavedItinerary() {
+  if (realMode) return
   try {
     const items = JSON.parse(sessionStorage.getItem('helpingold-itinerary') || '[]')
     const destinationItem = items[1] || items[0]
@@ -32,29 +41,37 @@ function applySavedItinerary() {
 
 onMounted(async () => {
   applySavedItinerary()
-  if (!isApiConfigured()) return
+  if (!realMode) return
   try {
     const list = await elderApi.list()
     const current = list?.items?.[0]
-    // Keep the display profile consistent with the demo account (张建国).
-    // The backend record is still used for authorization and trip data.
-    if (current) Object.assign(elder, { id: current.id, age: current.age ?? elder.age })
+    if (!current) throw new Error('没有可用的老人资料')
+    Object.assign(elder, { id: current.id, name: current.name, age: current.age ?? '--' })
     if (elder.id) {
       const trip = await elderApi.currentTrip(elder.id)
       // FIX START: 用后端返回的行程 ID 和状态初始化页面。
       if (trip) {
         currentTripId.value = trip.id
+        currentTripBackendStatus.value = trip.status
         Object.assign(elder, { destination: trip.destination })
         tripStatus.value = trip.status === 'active' ? '出游中' : '待出发'
-        locationStatus.value = trip.status === 'active' ? '定位正常' : '定位已暂停'
+        locationStatus.value = trip.status === 'active' ? '等待定位上报' : '定位已暂停'
       } else {
         currentTripId.value = null
+        currentTripBackendStatus.value = null
         tripStatus.value = '已返程'
         locationStatus.value = '已停止定位'
       }
       // FIX END: 用后端返回的行程 ID 和状态初始化页面。
     }
-  } catch (error) { console.warn('老人端数据加载失败，使用演示数据', error) }
+    tripDataAvailable.value = true
+  } catch (error) {
+    tripDataAvailable.value = false
+    currentTripBackendStatus.value = null
+    tripStatus.value = '行程状态不可用'
+    locationStatus.value = '无法获取最新状态'
+    console.warn('老人端后端数据加载失败', error)
+  }
   applySavedItinerary()
 })
 
@@ -68,11 +85,13 @@ async function toggleTrip() {
     }
 
     try {
-      if (isApiConfigured()) {
+      if (realMode) {
         if (!currentTripId.value) throw new Error('没有可结束的行程')
         await tripApi.end(currentTripId.value)
         currentTripId.value = null
       }
+      currentTripBackendStatus.value = null
+      tripDataAvailable.value = true
       tripStatus.value = '已返程'
       locationStatus.value = '已停止定位'
       showSuccessToast('出游已结束，辛苦了')
@@ -83,26 +102,59 @@ async function toggleTrip() {
   }
 
   try {
-    if (isApiConfigured()) {
+    if (realMode) {
       let tripId = currentTripId.value
       if (!tripId) {
         const createdTrip = await tripApi.create(elder.destination)
         tripId = createdTrip.id
+        currentTripId.value = createdTrip.id
+        currentTripBackendStatus.value = createdTrip.status
       }
       const startedTrip = await tripApi.start(tripId)
       currentTripId.value = startedTrip.id
+      currentTripBackendStatus.value = startedTrip.status
     }
+    if (!realMode) currentTripBackendStatus.value = 'active'
+    tripDataAvailable.value = true
     tripStatus.value = '出游中'
-    locationStatus.value = '定位正常'
-    showSuccessToast('已开始出游，家人可以看到您的位置')
+    locationStatus.value = realMode ? '等待定位上报' : '模拟定位正常'
+    showSuccessToast(realMode ? '出游已开始，等待定位数据上报' : '演示行程已开始，正在显示模拟位置')
   } catch (error) {
     showFailToast(error instanceof Error ? error.message : '开始行程失败')
   }
 }
 // FIX END: 开始/结束行程时调用真实 API，并始终传递 trip.id。
 
-function emergency() {
-  showDialog({ title: '紧急联系', message: `将联系您的家人：${elder.family}\n电话：${elder.familyPhone}\n\n这是演示操作，不会拨打真实电话。`, confirmButtonText: '知道了' })
+async function emergency() {
+  if (sosSending.value) return
+  if (!realMode) {
+    showDialog({ title: '紧急联系（演示）', message: `演示联系人：${elder.family}\n电话：${elder.familyPhone}\n\n这是演示操作，不会向后端发送求助。`, confirmButtonText: '知道了' })
+    return
+  }
+  if (!tripDataAvailable.value) {
+    showFailToast('行程状态未知，求助未发送')
+    return
+  }
+  if (!currentTripId.value || currentTripBackendStatus.value !== 'active') {
+    showFailToast('只有进行中的行程可以发送求助')
+    return
+  }
+
+  sosResult.value = ''
+  try {
+    const submission = await runSosSubmission({
+      isPending: () => sosSending.value,
+      setPending: (pending) => { sosSending.value = pending },
+      submit: () => alertApi.sos(currentTripId.value)
+    })
+    if (!submission.submitted) return
+    const alert = submission.value
+    sosResult.value = presentSosSuccess(alert)
+    await showDialog({ title: '求助已由后端记录', message: sosResult.value, confirmButtonText: '知道了' })
+  } catch (error) {
+    sosResult.value = presentSosFailure(error)
+    showFailToast(sosResult.value)
+  }
 }
 
 function confirmAiPlan() {
@@ -137,17 +189,18 @@ function go(path) { router.push(path) }
     <main class="elder-content">
       <section class="status-card"><div class="status-icon"><van-icon :name="isTripActive ? 'location-o' : 'home-o'" /></div><div><small>当前状态</small><strong>{{ tripStatus }}</strong><p v-if="isTripActive">正在前往：{{ elder.destination }}</p><p v-else>欢迎回家，今天辛苦了</p></div><span :class="['status-dot', { off: !isTripActive }]" /></section>
       <!-- FIX START: 显示脚本中随 API 行程状态更新的 locationStatus。 -->
-      <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p>{{ isTripActive ? '家人可以看到您的最新位置' : '开始出游后将自动开启定位' }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
+      <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p>{{ isTripActive ? (realMode ? '等待定位数据上传后供家人查看' : '演示：显示模拟位置') : (realMode ? '开始出游后等待定位数据上传' : '演示：开始后显示模拟定位') }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
       <!-- FIX END: 显示真实的 locationStatus。 -->
       <button class="plan-card" type="button" @click="go('/schedule')"><div class="plan-title"><div><small>今日出游计划</small><strong>天坛公园慢游</strong></div><van-icon name="arrow" /></div><div class="plan-row"><span><b>08:30</b><small>专车到家</small></span><i></i><span><b>09:00</b><small>到达公园</small></span><i></i><span><b>15:30</b><small>专车回家</small></span></div><p><van-icon name="info-o" /> 沿平整步道游览，途中有休息区</p></button>
-      <button class="main-action" type="button" @click="toggleTrip"><van-icon :name="isTripActive ? 'stop-circle-o' : 'play-circle-o'" /><span>{{ isTripActive ? '结束本次出游' : '开始出游' }}</span><small>{{ isTripActive ? '确认安全到家后点击' : '点击后家人可以看到您的位置' }}</small></button>
+      <button class="main-action" type="button" @click="toggleTrip"><van-icon :name="isTripActive ? 'stop-circle-o' : 'play-circle-o'" /><span>{{ isTripActive ? '结束本次出游' : '开始出游' }}</span><small>{{ tripActionHint }}</small></button>
       <!-- FIX START: 给已经实现但没有入口的仿真组件增加可见入口。 -->
-      <section class="quick-actions"><button type="button" @click="go('/schedule')"><span class="purple"><van-icon name="todo-list-o" /></span><strong>我的行程</strong><small>查看今天安排</small></button><button type="button" @click="go('/simulation')"><span class="purple"><van-icon name="aim" /></span><strong>定位仿真</strong><small>测试轨迹与围栏告警</small></button><button type="button" @click="emergency"><span class="red"><van-icon name="phone-o" /></span><strong>紧急联系</strong><small>联系家人</small></button></section>
+      <section class="quick-actions"><button type="button" @click="go('/schedule')"><span class="purple"><van-icon name="todo-list-o" /></span><strong>我的行程</strong><small>查看今天安排</small></button><button type="button" @click="go('/simulation')"><span class="purple"><van-icon name="aim" /></span><strong>定位仿真</strong><small>测试轨迹与围栏告警</small></button><button type="button" :disabled="sosSending" @click="emergency"><span class="red"><van-icon name="phone-o" /></span><strong>{{ sosSending ? '正在发送' : '紧急求助' }}</strong><small>{{ realMode ? '发送至后端告警中心' : '演示操作' }}</small></button></section>
+      <p v-if="sosResult" class="sos-result">{{ sosResult }}</p>
       <!-- FIX END: 给仿真组件增加可见入口。 -->
       <button class="ai-plan-card" type="button" @click="showAiChat = true"><span class="ai-badge"><van-icon name="service-o" /></span><div><small>AI 行程管家</small><strong>和小助手说说您的出游想法</strong><p>我会帮您整理安排，确认后再上传</p></div><van-icon name="arrow" /></button>
       <button class="more-button" type="button" @click="showMore = !showMore">{{ showMore ? '收起更多' : '更多信息' }} <van-icon :name="showMore ? 'arrow-up' : 'arrow-down'" /></button>
       <div v-if="showMore" class="more-card"><van-cell title="目的地" :value="elder.destination"/><van-cell title="最后更新" :value="elder.lastUpdate"/><van-cell title="紧急联系人" :value="elder.family"/><van-cell title="联系电话" :value="elder.familyPhone"/></div>
-      <p class="privacy-note">演示页面 · 姓名、位置和联系电话均为虚构数据</p>
+      <p class="privacy-note">{{ realMode ? '真实模式 · SOS 结果以后端 Alert 为准' : '演示页面 · 姓名、位置和联系电话均为虚构数据' }}</p>
     </main>
     <van-popup v-model:show="showAiPlan" round position="bottom" :style="{ padding: '20px 16px 24px' }"><div class="ai-plan-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>AI 已为您安排</strong><small>不用操作，我会按时提醒您</small></div></div><div class="ai-timeline"><p><b>08:30</b><span>专车到家</span></p><p><b>09:00</b><span>到达天坛公园，慢慢游览</span></p><p><b>15:30</b><span>专车接您回家</span></p></div><van-button block round type="primary" color="#667eea" @click="confirmAiPlan">好的，我知道了</van-button></div></van-popup>
     <van-popup v-model:show="showAiChat" round position="bottom" :style="{ padding: '18px 16px 20px' }"><div class="ai-chat-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>行程小助手</strong><small>告诉我想去哪里、什么时候出发</small></div></div><div class="ai-messages"><div v-for="(item, index) in aiMessages" :key="index" :class="['ai-message', item.role]"><span>{{ item.text }}</span></div><div v-if="aiLoading" class="ai-message assistant"><span>正在帮您想一想…</span></div></div><div class="ai-quick"><button type="button" @click="aiInput='帮我安排明天去天坛公园'">安排明天出游</button><button type="button" @click="aiInput='看看我今天的行程'">查看今天行程</button></div><div class="ai-input-row"><van-field v-model="aiInput" clearable placeholder="例如：帮我安排明天出游" @keyup.enter="sendAiMessage"/><van-button round type="primary" color="#667eea" :loading="aiLoading" @click="sendAiMessage">发送</van-button></div><van-button block round plain type="primary" @click="showAiPlan = true; showAiChat = false">查看今日安排</van-button></div></van-popup>
@@ -184,4 +237,5 @@ function go(path) { router.push(path) }
 .ai-message.user { justify-content: flex-end; }.ai-message.user span { color: white; background: #667eea; }
 .ai-quick { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 9px; }.ai-quick button { flex: none; padding: 7px 10px; color: #6657a5; border: 1px solid #e1dcf3; border-radius: 14px; background: #faf9fe; font-size: 10px; }
 .ai-input-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }.ai-input-row :deep(.van-cell) { flex: 1; padding: 8px 10px; border-radius: 20px; background: #f5f5f5; }.ai-input-row .van-button { width: 58px; height: 36px; padding: 0; font-size: 11px; }
+.quick-actions button:disabled{cursor:wait;opacity:.65}.sos-result{margin:10px 2px 0;padding:9px 11px;color:#6657a5;border-radius:9px;background:#f0edfb;font-size:10px;line-height:1.5}
 </style>

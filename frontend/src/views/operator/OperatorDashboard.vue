@@ -1,67 +1,84 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showSuccessToast } from 'vant'
+import { showFailToast, showSuccessToast } from 'vant'
 import { useUserStore } from '../../stores/user'
 import { alertHistory, alerts as alertSeed, elders as elderSeed, operatorOverview, trips as tripSeed } from '../../mock/operator'
 import AlertsPanel from './AlertsPanel.vue'
 import EldersPanel from './EldersPanel.vue'
 import TripsPanel from './TripsPanel.vue'
 import { alertApi, elderApi, isApiConfigured } from '../../services/api'
+import {
+  replaceAuthoritativeOperatorSnapshot,
+  runOperatorAlertAction,
+  selectOperatorTrips,
+  syncDemoElderState
+} from '../../services/operatorAlerts'
+import { createPollingController, normalizePollingInterval } from '../../services/polling'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const realMode = isApiConfigured()
 const activeNav = ref(['overview', 'alerts', 'elders', 'trips'].includes(route.query.view) ? route.query.view : 'overview')
 const showAccount = ref(false)
-const alerts = reactive([...alertSeed, ...alertHistory].map((alert) => ({ ...alert })))
-const elders = reactive(elderSeed.map((elder) => ({ ...elder })))
-const trips = reactive(tripSeed.map((trip) => ({ ...trip })))
+const alerts = reactive((realMode ? [] : [...alertSeed, ...alertHistory]).map((alert) => ({ ...alert })))
+const elders = reactive((realMode ? [] : elderSeed).map((elder) => ({ ...elder })))
+const trips = reactive(selectOperatorTrips(realMode, tripSeed))
+const operatorDataAvailable = ref(!realMode)
+const operatorError = ref('')
+const operatorActionId = ref(null)
 const liveAlerts = computed(() => alerts.filter((alert) => alert.status !== '已解决'))
 const unresolvedAlertCount = computed(() => liveAlerts.value.length)
 const activeTripCount = computed(() => trips.filter((trip) => trip.status === '进行中').length)
-const resolvedCount = computed(() => alerts.filter((alert) => alert.status === '已解决' && !alert.time.startsWith('昨天')).length + operatorOverview.resolvedBeforeDemo)
+const resolvedCount = computed(() => alerts.filter((alert) => alert.status === '已解决' && !alert.time.startsWith('昨天')).length + (realMode ? 0 : operatorOverview.resolvedBeforeDemo))
 const currentTime = ref('')
 const timeFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit' })
 function refreshTime() { currentTime.value = timeFormatter.format(new Date()) }
 refreshTime()
 const timeTimer = window.setInterval(refreshTime, 30_000)
-onBeforeUnmount(() => window.clearInterval(timeTimer))
 
-onMounted(async () => {
-  if (!isApiConfigured()) return
-  try {
-    const [elderData, alertData] = await Promise.all([elderApi.list(), alertApi.list('page_size=100')])
-    if (elderData?.items?.length) {
-      elders.splice(0, elders.length, ...elderData.items.map((item) => ({
-        id: item.id, name: item.name, age: item.age, status: '在家', risk: '低风险', family: '家属', familyPhone: '已绑定'
-      })))
-    }
-    if (alertData?.items?.length) {
-      alerts.splice(0, alerts.length, ...alertData.items.map((item) => ({
-        id: item.id, elderName: elderData.items.find((elder) => elder.id === item.elder_id)?.name || `老人 ${item.elder_id}`,
-        type: item.type === 'emergency' ? 'SOS 紧急求助' : '电子围栏越界', level: item.type === 'emergency' ? 'urgent' : 'warning',
-        status: item.status === 'resolved' ? '已解决' : item.status === 'processing' ? '处理中' : '待处理',
-        location: item.latitude && item.longitude ? `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}` : '位置待更新',
-        time: new Date(item.occurred_at).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-      })))
-    }
-  } catch (error) {
-    console.warn('业务数据加载失败，将继续使用演示数据', error)
+async function loadOperatorAlerts() {
+  const [elderData, alertData] = await Promise.all([
+    elderApi.list(),
+    alertApi.list('page_size=100')
+  ])
+  replaceAuthoritativeOperatorSnapshot({ alerts, elders }, elderData, alertData)
+  operatorDataAvailable.value = true
+  operatorError.value = ''
+}
+
+const alertPolling = createPollingController({
+  intervalMs: normalizePollingInterval(import.meta.env.VITE_MONITORING_POLL_INTERVAL_MS),
+  task: loadOperatorAlerts,
+  onError(error) {
+    operatorDataAvailable.value = false
+    operatorError.value = error instanceof Error ? error.message : '告警队列加载失败'
+    console.warn('运营告警队列同步失败', error)
   }
+})
+
+function handleVisibilityChange() {
+  if (document.hidden) alertPolling.stop()
+  else void alertPolling.start()
+}
+
+onMounted(() => {
+  if (!realMode) return
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  void alertPolling.start()
+})
+
+onBeforeUnmount(() => {
+  window.clearInterval(timeTimer)
+  alertPolling.stop()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 
 function elderByName(name) { return elders.find((elder) => elder.name === name) }
 function contactFor(name) { const elder = elderByName(name); return elder ? `${elder.family} ${elder.familyPhone}` : '暂无联系人' }
 function syncElderState(name) {
-  const elder = elderByName(name)
-  if (!elder) return
-  const elderAlerts = alerts.filter((alert) => alert.elderName === name && alert.status !== '已解决')
-  const activeTrip = trips.find((trip) => trip.elderName === name && trip.status === '进行中')
-  if (elderAlerts.some((alert) => alert.level === 'urgent')) { elder.status = '告警中'; elder.risk = '高风险' }
-  else if (elderAlerts.length) { elder.status = '需关注'; elder.risk = '中风险' }
-  else if (activeTrip) { elder.status = '出游中'; elder.risk = '低风险' }
-  else { elder.status = '在家'; elder.risk = '低风险' }
+  return syncDemoElderState({ realMode, elders, alerts, trips, elderName: name })
 }
 alerts.forEach((alert) => { alert.familyContact = contactFor(alert.elderName) })
 trips.forEach((trip) => { trip.contact = `家属：${contactFor(trip.elderName)}` })
@@ -80,14 +97,36 @@ function selectNav(item) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function handleAlert(alert) {
-  alert.status = '处理中'
-  syncElderState(alert.elderName)
-  showSuccessToast(`已接手 ${alert.elderName} 的告警`)
+async function handleAlert(alert) {
+  if (alert.status === '处理中') {
+    activeNav.value = 'alerts'
+    return
+  }
+  operatorActionId.value = alert.id
+  try {
+    await runOperatorAlertAction({
+      realMode,
+      action: () => alertApi.accept(alert.id),
+      refresh: () => alertPolling.refreshAfterCurrent(),
+      applyDemo: () => {
+        alert.status = '处理中'
+        syncElderState(alert.elderName)
+      }
+    })
+    showSuccessToast(`已接手 ${alert.elderName} 的告警`)
+  } catch (error) {
+    showFailToast(error instanceof Error ? error.message : '告警接单失败')
+  } finally {
+    operatorActionId.value = null
+  }
 }
 
 function onAlertChanged(name) { syncElderState(name) }
-function onTripEnded(name) { syncElderState(name) }
+function onTripEnded(name) {
+  if (realMode) return
+  syncElderState(name)
+}
+function refreshOperatorAlerts() { return alertPolling.refreshAfterCurrent() }
 
 function logout() {
   userStore.logout()
@@ -97,9 +136,11 @@ function logout() {
 
 <template>
   <div class="operator-page">
-    <AlertsPanel v-if="activeNav === 'alerts'" :alerts="alerts" @changed="onAlertChanged" />
+    <p v-if="realMode && !operatorDataAvailable" class="operator-error">告警数据不可用：{{ operatorError || '无法获取最新状态' }}</p>
+    <AlertsPanel v-if="activeNav === 'alerts'" :alerts="alerts" :real-mode="realMode" :refresh-alerts="refreshOperatorAlerts" @changed="onAlertChanged" />
     <EldersPanel v-else-if="activeNav === 'elders'" :elders="elders" @show-trips="activeNav = 'trips'" />
-    <TripsPanel v-else-if="activeNav === 'trips'" :trips="trips" @ended="onTripEnded" />
+    <TripsPanel v-else-if="activeNav === 'trips' && !realMode" :trips="trips" @ended="onTripEnded" />
+    <section v-else-if="activeNav === 'trips'" class="trip-source-unavailable"><h1>出游管理</h1><p>真实行程数据尚未接入</p></section>
     <template v-else>
     <header class="operator-header">
       <div class="header-row">
@@ -113,14 +154,14 @@ function logout() {
 
     <main class="operator-content">
       <section class="summary-card">
-        <div><small>实时守护</small><strong>{{ activeTripCount }}</strong><span>位老人正在出游</span></div>
+        <div><small>实时守护</small><strong>{{ realMode ? '—' : activeTripCount }}</strong><span>{{ realMode ? '真实行程数据尚未接入' : '位老人正在出游' }}</span></div>
         <div class="summary-divider"></div>
         <div><small>未解决</small><strong class="warning-number">{{ unresolvedAlertCount }}</strong><span>条安全告警</span></div>
       </section>
 
       <section class="quick-grid" aria-label="运营数据">
         <button type="button" @click="selectNav(navItems[2])"><span class="quick-icon purple"><van-icon name="friends-o" /></span><strong>{{ elders.length }}</strong><small>服务中老人</small></button>
-        <button type="button" @click="selectNav(navItems[3])"><span class="quick-icon blue"><van-icon name="guide-o" /></span><strong>{{ activeTripCount }}</strong><small>进行中出游</small></button>
+        <button type="button" @click="selectNav(navItems[3])"><span class="quick-icon blue"><van-icon name="guide-o" /></span><strong>{{ realMode ? '—' : activeTripCount }}</strong><small>{{ realMode ? '行程数据未接入' : '进行中出游' }}</small></button>
         <button type="button" @click="selectNav(navItems[1])"><span class="quick-icon coral"><van-icon name="warning-o" /></span><strong>{{ unresolvedAlertCount }}</strong><small>未解决告警</small></button>
         <button type="button" @click="selectNav(navItems[1])"><span class="quick-icon green"><van-icon name="passed" /></span><strong>{{ resolvedCount }}</strong><small>今日已处理</small></button>
       </section>
@@ -130,7 +171,7 @@ function logout() {
         <div class="list-card">
           <article v-for="alert in liveAlerts.slice(0, 3)" :key="alert.id" class="alert-row">
             <span :class="['alert-icon', alert.level]"><van-icon :name="alert.level === 'urgent' ? 'bell' : 'warning-o'" /></span>
-            <div class="alert-main"><div><strong>{{ alert.type }}</strong><time>{{ alert.time }}</time></div><p>{{ alert.elderName }} · {{ alert.location }}</p><button :class="{ handling: alert.status === '处理中' }" type="button" @click="handleAlert(alert)">{{ alert.status === '处理中' ? '处理中' : '立即处理' }}</button></div>
+            <div class="alert-main"><div><strong>{{ alert.type }}</strong><time>{{ alert.time }}</time></div><p>{{ alert.elderName }} · {{ alert.location }}</p><button :class="{ handling: alert.status === '处理中' }" type="button" :disabled="operatorActionId === alert.id" @click="handleAlert(alert)">{{ operatorActionId === alert.id ? '提交中' : alert.status === '处理中' ? '处理中' : '立即处理' }}</button></div>
           </article>
         </div>
       </section>
@@ -138,7 +179,8 @@ function logout() {
       <section class="section-block">
         <div class="section-title"><div><h2>进行中的出游</h2><p>位置状态实时更新</p></div><button type="button" @click="selectNav(navItems[3])">管理 <van-icon name="arrow" /></button></div>
         <div class="list-card">
-          <article v-for="trip in trips.filter((item) => item.status === '进行中')" :key="trip.id" class="trip-row">
+          <p v-if="realMode" class="trip-source-note">真实行程数据尚未接入</p>
+          <article v-for="trip in realMode ? [] : trips.filter((item) => item.status === '进行中')" :key="trip.id" class="trip-row">
             <span class="avatar">{{ trip.elderName.slice(-1) }}</span>
             <div class="trip-main"><strong>{{ trip.elderName }}</strong><p><van-icon name="location-o" />{{ trip.destination }}</p><small>{{ trip.startedAt }} 出发 · {{ trip.duration }}</small></div>
             <em :class="{ attention: trip.state === '需关注' }">{{ trip.state }}</em>
@@ -146,7 +188,7 @@ function logout() {
         </div>
       </section>
 
-      <p class="demo-note">演示环境 · 页面中的姓名、位置及健康相关信息均为虚构数据</p>
+      <p class="demo-note">{{ realMode ? '真实模式 · 告警状态来自后端' : '演示环境 · 页面中的姓名、位置及健康相关信息均为虚构数据' }}</p>
     </main>
     </template>
 
@@ -192,4 +234,7 @@ button { font: inherit; }
 </style>
 <style scoped>
 .brand-line strong { line-height: 1; transform: translateY(3px); }
+</style>
+<style scoped>
+.operator-error{position:sticky;top:0;z-index:8;margin:0;padding:9px 14px;color:#a33f46;background:#fff0f1;font-size:11px;text-align:center}.alert-main button:disabled{cursor:wait;opacity:.65}.trip-source-unavailable{min-height:calc(100vh - 62px);padding:48px 20px;color:#646566;background:#f5f5f5;text-align:center}.trip-source-unavailable h1{margin:0 0 10px;color:#323233;font-size:20px}.trip-source-unavailable p,.trip-source-note{color:#969799;font-size:12px;text-align:center}.trip-source-note{padding:24px 12px}
 </style>

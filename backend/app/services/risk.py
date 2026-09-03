@@ -1,4 +1,6 @@
+from dataclasses import dataclass
 from datetime import timedelta
+from enum import StrEnum
 from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy import select
@@ -10,6 +12,19 @@ from app.models.geofence import Geofence
 from app.models.location import Location
 
 EARTH_RADIUS_METERS = 6_371_000
+
+
+class GeofenceRiskStatus(StrEnum):
+    SAFE = "SAFE"
+    PENDING = "PENDING"
+    ALERT = "ALERT"
+
+
+@dataclass(frozen=True)
+class GeofenceRiskEvaluation:
+    status: GeofenceRiskStatus
+    latest_location_id: int
+    consecutive_outside_count: int
 
 
 def distance_meters(
@@ -46,17 +61,17 @@ def _has_recent_unresolved_event(db: Session, location: Location) -> bool:
     )
 
 
-def _detect_geofence_exit(db: Session, location: Location) -> Alert | None:
+def evaluate_geofence_risk(
+    db: Session,
+    *,
+    trip_id: int,
+    elder_id: int,
+) -> GeofenceRiskEvaluation | None:
+    """Evaluate the current reliable location sequence without creating an Alert."""
     settings = get_settings()
-    if (
-        location.accuracy_meters is None
-        or location.accuracy_meters > settings.geofence_max_accuracy_meters
-    ):
-        return None
-
     geofence = db.scalar(
         select(Geofence).where(
-            Geofence.elder_id == location.trip.elder_id,
+            Geofence.elder_id == elder_id,
             Geofence.enabled.is_(True),
         )
     )
@@ -67,7 +82,7 @@ def _detect_geofence_exit(db: Session, location: Location) -> Alert | None:
         db.scalars(
             select(Location)
             .where(
-                Location.trip_id == location.trip_id,
+                Location.trip_id == trip_id,
                 Location.accuracy_meters.is_not(None),
                 Location.accuracy_meters <= settings.geofence_max_accuracy_meters,
             )
@@ -75,20 +90,57 @@ def _detect_geofence_exit(db: Session, location: Location) -> Alert | None:
             .limit(settings.geofence_trigger_count)
         ).all()
     )
-    if len(recent) < settings.geofence_trigger_count or recent[0].id != location.id:
+    if not recent:
         return None
 
-    all_outside = all(
-        distance_meters(
-            item.latitude,
-            item.longitude,
-            geofence.center_latitude,
-            geofence.center_longitude,
+    consecutive_outside_count = 0
+    for item in recent:
+        is_outside = (
+            distance_meters(
+                item.latitude,
+                item.longitude,
+                geofence.center_latitude,
+                geofence.center_longitude,
+            )
+            > geofence.radius_meters
         )
-        > geofence.radius_meters
-        for item in recent
+        if not is_outside:
+            break
+        consecutive_outside_count += 1
+
+    if consecutive_outside_count == 0:
+        status = GeofenceRiskStatus.SAFE
+    elif consecutive_outside_count >= settings.geofence_trigger_count:
+        status = GeofenceRiskStatus.ALERT
+    else:
+        status = GeofenceRiskStatus.PENDING
+
+    return GeofenceRiskEvaluation(
+        status=status,
+        latest_location_id=recent[0].id,
+        consecutive_outside_count=consecutive_outside_count,
     )
-    if not all_outside or _has_recent_unresolved_event(db, location):
+
+
+def _detect_geofence_exit(db: Session, location: Location) -> Alert | None:
+    settings = get_settings()
+    if (
+        location.accuracy_meters is None
+        or location.accuracy_meters > settings.geofence_max_accuracy_meters
+    ):
+        return None
+
+    evaluation = evaluate_geofence_risk(
+        db,
+        trip_id=location.trip_id,
+        elder_id=location.trip.elder_id,
+    )
+    if (
+        evaluation is None
+        or evaluation.latest_location_id != location.id
+        or evaluation.status != GeofenceRiskStatus.ALERT
+        or _has_recent_unresolved_event(db, location)
+    ):
         return None
 
     event = Alert(
