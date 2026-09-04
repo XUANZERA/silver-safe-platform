@@ -1,11 +1,15 @@
 <template>
-  <div class="map-wrapper">
+  <div class="map-wrapper" :style="{ height: computedHeight }">
     <div
-      id="map"
+      ref="mapContainer"
       class="map-container"
+      :style="{ height: computedHeight }"
     ></div>
 
-    <div class="simulation-panel">
+    <div
+      v-if="!realMode"
+      class="simulation-panel"
+    >
       <div class="button-row">
         <button
           type="button"
@@ -77,10 +81,10 @@
     </div>
 
     <div
-      v-if="mapMessage"
+      v-if="displayMessage"
       class="map-message"
     >
-      {{ mapMessage }}
+      {{ displayMessage }}
     </div>
   </div>
 </template>
@@ -88,72 +92,134 @@
 
 <script setup>
 import {
+  computed,
   onMounted,
   onUnmounted,
   ref,
+  watch,
 } from "vue"
 
-import AMapLoader from "@amap/amap-jsapi-loader"
-
 import elderIcon from "./elder.png"
-
+import { isApiConfigured } from "../../services/api.js"
 import {
-  servicePoints,
-} from "../../mock/servicePoints.js"
+  createMapLifecycleManager,
+  formatPolylinePath,
+  loadAMapSdk,
+} from "../../services/map/amapCoordinateAdapter.js"
 
-import {
-  elderTrack,
-} from "../../mock/track.js"
+const props = defineProps({
+  realMode: {
+    type: Boolean,
+    default: () => isApiConfigured(),
+  },
+  latestPoint: {
+    type: Object,
+    default: null,
+  },
+  trackPoints: {
+    type: Array,
+    default: () => [],
+  },
+  status: {
+    type: String,
+    default: "READY",
+  },
+  statusMessage: {
+    type: String,
+    default: "",
+  },
+  elderName: {
+    type: String,
+    default: "老人",
+  },
+  height: {
+    type: String,
+    default: "",
+  },
+})
 
-import {
-  geofence,
-} from "../../mock/geofence.js"
+const emit = defineEmits(["map-ready", "map-error"])
 
-import {
-  createLocationSimulator,
-} from "../../services/locationSimulator.js"
+const STATUS_MESSAGES = {
+  NO_LOCATION: "暂无可用定位数据",
+  DATA_UNAVAILABLE: "暂时无法获取最新位置",
+  MAP_CONVERSION_FAILED: "位置暂时无法在地图中显示",
+  MAP_UNAVAILABLE: "地图暂时无法加载",
+}
 
-import {
-  createInitialGeofenceRiskState,
-  detectGeofenceRisk,
-} from "../../domain/risk/geofenceRisk.js"
-
-import {
-  isApiConfigured,
-} from "../../services/api.js"
-
-
+const mapContainer = ref(null)
 const mapMessage = ref("")
 
+// Simulation demo state
 const simulatorReady = ref(false)
-
 const simulationStatus = ref("IDLE")
-
 const currentPointNumber = ref(0)
-
 const totalPoints = ref(0)
-
 const riskStatus = ref("SAFE")
-
 const currentDistanceMeters = ref(0)
-
 const consecutiveOutsideCount = ref(0)
-
 const riskEvents = ref([])
 
-
+let aMapSdk = null
 let mapInstance = null
 let geofenceCircle = null
 let elderMarker = null
 let dynamicTrackLine = null
 let simulator = null
-
 let simulationPoints = []
 let passedTrack = []
+let geofenceRiskState = null
 
-let geofenceRiskState =
-  createInitialGeofenceRiskState()
+// References to dynamically loaded demo modules
+let demoGeofence = null
+let demoDetectGeofenceRisk = null
+let demoCreateInitialGeofenceRiskState = null
 
+const computedHeight = computed(() => {
+  if (props.height) return props.height
+  return props.realMode ? "220px" : "600px"
+})
+
+const displayMessage = computed(() => {
+  if (!props.realMode) {
+    return mapMessage.value
+  }
+  if (props.statusMessage) {
+    return props.statusMessage
+  }
+  if (mapMessage.value) {
+    return mapMessage.value
+  }
+  if (props.status && props.status !== "READY") {
+    return STATUS_MESSAGES[props.status] || props.status
+  }
+  return ""
+})
+
+function formatRecordedTime(isoString) {
+  if (!isoString) return "位置已更新"
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return "位置已更新"
+  return `最后定位：${date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })}`
+}
+
+function createElderIconElement() {
+  const image = document.createElement("img")
+  image.src = elderIcon
+  image.alt = props.realMode
+    ? `${props.elderName}最新记录位置`
+    : `${props.elderName}模拟位置`
+  image.style.display = "block"
+  image.style.width = "36px"
+  image.style.height = "36px"
+  image.style.maxWidth = "none"
+  image.style.objectFit = "contain"
+  return image
+}
 
 function isValidCoordinate(point) {
   return (
@@ -168,421 +234,232 @@ function isValidCoordinate(point) {
   )
 }
 
-
 function normalizeCoordinateList(rawPoints) {
-  if (!Array.isArray(rawPoints)) {
-    return []
-  }
-
+  if (!Array.isArray(rawPoints)) return []
   return rawPoints.filter(isValidCoordinate)
 }
 
+// ----------------------------------------------------
+// REAL Mode Presentation Logic
+// ----------------------------------------------------
 
-function isValidGeofence(fence) {
-  return (
-    fence &&
-    typeof fence === "object" &&
-    isValidCoordinate(fence.center) &&
-    Number.isFinite(fence.radius) &&
-    fence.radius > 0
-  )
-}
+function updateRealMarker(point) {
+  if (!mapInstance || !aMapSdk) return
 
+  if (!point || !isValidCoordinate(point) || props.status !== "READY") {
+    if (elderMarker) {
+      mapInstance.remove(elderMarker)
+      elderMarker = null
+    }
+    return
+  }
 
-function createElderIconElement() {
-  const image =
-    document.createElement("img")
+  const position = [point.longitude, point.latitude]
 
-  image.src = elderIcon
-  image.alt = "老人当前位置"
+  if (!elderMarker) {
+    elderMarker = new aMapSdk.Marker({
+      position,
+      content: createElderIconElement(),
+      anchor: "bottom-center",
+      title: `${props.elderName}最新记录位置`,
+      zIndex: 100,
+    })
+    mapInstance.add(elderMarker)
+  } else {
+    elderMarker.setPosition(position)
+    if (typeof elderMarker.setTitle === "function") {
+      elderMarker.setTitle(`${props.elderName}最新记录位置`)
+    }
+  }
 
-  image.style.display = "block"
-  image.style.width = "36px"
-  image.style.height = "36px"
-  image.style.maxWidth = "none"
-  image.style.objectFit = "contain"
-
-  return image
-}
-
-
-function createMap(AMap) {
-  return new AMap.Map("map", {
-    zoom: 15,
-
-    center: [
-      geofence.center.longitude,
-      geofence.center.latitude,
-    ],
-  })
-}
-
-
-function createGeofenceCircle(
-  AMap,
-  map,
-) {
-  const circle = new AMap.Circle({
-    center: [
-      geofence.center.longitude,
-      geofence.center.latitude,
-    ],
-
-    radius: geofence.radius,
-
-    strokeColor: "#1677FF",
-    strokeWeight: 3,
-    strokeOpacity: 0.9,
-
-    fillColor: "#1677FF",
-    fillOpacity: 0.12,
-
-    zIndex: 10,
-  })
-
-  map.add(circle)
-
-  return circle
-}
-
-
-function createDynamicTrackLine(
-  AMap,
-  map,
-) {
-  const line = new AMap.Polyline({
-    // 初始没有已走轨迹
-    path: [],
-
-    strokeColor: "#3366FF",
-    strokeWeight: 6,
-    strokeOpacity: 0.9,
-
-    lineJoin: "round",
-    lineCap: "round",
-
-    zIndex: 20,
-  })
-
-  map.add(line)
-
-  return line
-}
-
-
-function createElderMarker(
-  AMap,
-  map,
-  initialPoint,
-) {
-  const marker = new AMap.Marker({
-    position: [
-      initialPoint.longitude,
-      initialPoint.latitude,
-    ],
-
-    content: createElderIconElement(),
-
-    anchor: "bottom-center",
-    title: "老人当前位置",
-    zIndex: 100,
-  })
-
-  marker.setLabel({
+  const timeLabel = formatRecordedTime(point.recordedAt)
+  elderMarker.setLabel({
     direction: "top",
-    offset: new AMap.Pixel(0, -8),
-    content: "等待开始模拟",
+    offset: new aMapSdk.Pixel(0, -8),
+    content: `${props.elderName} | ${timeLabel}`,
   })
 
-  map.add(marker)
-
-  return marker
-}
-
-
-function createStartMarker(
-  AMap,
-  map,
-  initialPoint,
-) {
-  const marker = new AMap.Marker({
-    position: [
-      initialPoint.longitude,
-      initialPoint.latitude,
-    ],
-
-    title: "老人出游起点",
-  })
-
-  marker.setLabel({
-    direction: "bottom",
-    offset: new AMap.Pixel(0, 5),
-    content: "老人出游起点",
-  })
-
-  map.add(marker)
-
-  return marker
-}
-
-
-function createServiceMarkers(
-  AMap,
-  map,
-  validServicePoints,
-) {
-  const markers =
-    validServicePoints.map((point) => {
-      const pointName =
-        point.name ?? "未命名服务点"
-
-      const marker = new AMap.Marker({
-        position: [
-          point.longitude,
-          point.latitude,
-        ],
-
-        title: pointName,
-      })
-
-      marker.setLabel({
-        direction: "top",
-        offset: new AMap.Pixel(0, -5),
-        content: pointName,
-      })
-
-      return marker
-    })
-
-  if (markers.length > 0) {
-    map.add(markers)
+  // Center view on the latest position
+  const validPath = formatPolylinePath(props.trackPoints)
+  if (validPath.length >= 2 && dynamicTrackLine) {
+    mapInstance.setFitView([elderMarker, dynamicTrackLine], false, [40, 40, 40, 40], 17)
+  } else {
+    mapInstance.setCenter(position)
   }
-
-  return markers
 }
 
+function updateRealTrack(track) {
+  if (!mapInstance || !aMapSdk) return
 
-function formatCurrentTime() {
-  return new Date().toLocaleTimeString(
-    "zh-CN",
-    {
-      hour12: false,
+  const path = formatPolylinePath(track)
+  if (path.length >= 2) {
+    if (!dynamicTrackLine) {
+      dynamicTrackLine = new aMapSdk.Polyline({
+        path,
+        strokeColor: "#3366FF",
+        strokeWeight: 6,
+        strokeOpacity: 0.9,
+        lineJoin: "round",
+        lineCap: "round",
+        zIndex: 20,
+      })
+      mapInstance.add(dynamicTrackLine)
+    } else {
+      dynamicTrackLine.setPath(path)
+    }
+    if (elderMarker) {
+      mapInstance.setFitView([elderMarker, dynamicTrackLine], false, [40, 40, 40, 40], 17)
+    }
+  } else {
+    if (dynamicTrackLine) {
+      dynamicTrackLine.setPath([])
+    }
+    if (elderMarker && props.latestPoint && isValidCoordinate(props.latestPoint)) {
+      mapInstance.setCenter([props.latestPoint.longitude, props.latestPoint.latitude])
+    }
+  }
+}
+
+let lifecycleManager = null
+let isDestroyed = false
+
+async function initializeRealMap() {
+  mapMessage.value = ""
+
+  lifecycleManager = createMapLifecycleManager({
+    loadSdk: loadAMapSdk,
+    initMap: async (AMap) => {
+      if (isDestroyed || !mapContainer.value) return null
+      aMapSdk = AMap
+
+      const defaultCenter = props.latestPoint && isValidCoordinate(props.latestPoint)
+        ? [props.latestPoint.longitude, props.latestPoint.latitude]
+        : [116.397428, 39.90923]
+
+      mapInstance = new AMap.Map(mapContainer.value, {
+        zoom: 16,
+        center: defaultCenter,
+      })
+
+      updateRealMarker(props.latestPoint)
+      updateRealTrack(props.trackPoints)
+      return mapInstance
     },
-  )
-}
-
-
-function getRiskStatusText(status) {
-  if (status === "ALERT") {
-    return "🚨 已确认越界"
-  }
-
-  if (status === "PENDING") {
-    return "⚠️ 越界待确认"
-  }
-
-  return "✅ 围栏内安全"
-}
-
-
-function updateGeofenceAppearance(status) {
-  if (!geofenceCircle) {
-    return
-  }
-
-  if (status === "ALERT") {
-    geofenceCircle.setOptions({
-      strokeColor: "#FF4D4F",
-      fillColor: "#FF4D4F",
-      fillOpacity: 0.2,
-    })
-
-    return
-  }
-
-  if (status === "PENDING") {
-    geofenceCircle.setOptions({
-      strokeColor: "#FA8C16",
-      fillColor: "#FA8C16",
-      fillOpacity: 0.16,
-    })
-
-    return
-  }
-
-  geofenceCircle.setOptions({
-    strokeColor: "#1677FF",
-    fillColor: "#1677FF",
-    fillOpacity: 0.12,
+    onReady: (map) => {
+      if (!isDestroyed && map) {
+        emit("map-ready", map)
+      }
+    },
+    onError: (error) => {
+      if (!isDestroyed) {
+        console.error("真实地图初始化失败：", error)
+        mapMessage.value = "地图暂时无法加载"
+        emit("map-error", error)
+      }
+    }
   })
+
+  await lifecycleManager.mount()
 }
 
+// ----------------------------------------------------
+// DEMO Simulation Mode Logic
+// ----------------------------------------------------
 
-/**
- * 每收到一个模拟定位点时执行。
- */
-function handleLocationPoint(
-  rawPoint,
-  pointIndex,
-) {
+function handleSimulationPoint(rawPoint, pointIndex) {
   const point = {
     ...rawPoint,
-    recordedAt: formatCurrentTime(),
+    recordedAt: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
   }
 
   passedTrack.push(point)
+  currentPointNumber.value = pointIndex + 1
 
-  currentPointNumber.value =
-    pointIndex + 1
+  elderMarker?.setPosition([point.longitude, point.latitude])
 
-  // 1. 更新老人Marker
-  elderMarker.setPosition([
-    point.longitude,
-    point.latitude,
-  ])
+  const passedPath = passedTrack.map((tp) => [tp.longitude, tp.latitude])
+  dynamicTrackLine?.setPath(passedPath)
 
-  // 2. 更新已经走过的轨迹
-  const passedPath =
-    passedTrack.map((trackPoint) => [
-      trackPoint.longitude,
-      trackPoint.latitude,
-    ])
+  if (demoDetectGeofenceRisk && demoGeofence) {
+    const result = demoDetectGeofenceRisk({
+      point,
+      fence: demoGeofence,
+      previousState: geofenceRiskState,
+      threshold: 3,
+    })
+    geofenceRiskState = result
+    riskStatus.value = result.status
+    currentDistanceMeters.value = Math.round(result.distanceMeters)
+    consecutiveOutsideCount.value = result.consecutiveOutside
 
-  dynamicTrackLine.setPath(passedPath)
+    elderMarker?.setLabel({
+      direction: "top",
+      offset: new aMapSdk.Pixel(0, -8),
+      content: `${result.status === "ALERT" ? "🚨 已确认越界" : result.status === "PENDING" ? "⚠️ 越界待确认" : "✅ 围栏内安全"} | ${currentDistanceMeters.value}米 | ${point.recordedAt}`,
+    })
 
-  // 3. 执行电子围栏风险检测
-  const result = detectGeofenceRisk({
-    point,
-    fence: geofence,
-    previousState: geofenceRiskState,
-    threshold: 3,
-  })
-
-  geofenceRiskState = result
-
-  riskStatus.value = result.status
-
-  currentDistanceMeters.value =
-    Math.round(result.distanceMeters)
-
-  consecutiveOutsideCount.value =
-    result.consecutiveOutside
-
-  // 4. 更新老人标签
-  elderMarker.setLabel({
-    direction: "top",
-    offset: new window.AMap.Pixel(0, -8),
-
-    content:
-      `${getRiskStatusText(result.status)} | ` +
-      `${currentDistanceMeters.value}米 | ` +
-      `${point.recordedAt}`,
-  })
-
-  // 5. 更新围栏颜色
-  updateGeofenceAppearance(
-    result.status,
-  )
-
-  // 6. 首次达到连续3点越界时产生事件
-  if (result.event) {
-    const event = {
-      ...result.event,
-
-      id:
-        `${result.event.type}-${Date.now()}`,
-
-      displayTime:
-        new Date(
-          result.event.occurredAt,
-        ).toLocaleTimeString(
-          "zh-CN",
-          {
-            hour12: false,
-          },
-        ),
+    if (geofenceCircle) {
+      if (result.status === "ALERT") {
+        geofenceCircle.setOptions({ strokeColor: "#FF4D4F", fillColor: "#FF4D4F", fillOpacity: 0.2 })
+      } else if (result.status === "PENDING") {
+        geofenceCircle.setOptions({ strokeColor: "#FA8C16", fillColor: "#FA8C16", fillOpacity: 0.16 })
+      } else {
+        geofenceCircle.setOptions({ strokeColor: "#1677FF", fillColor: "#1677FF", fillOpacity: 0.12 })
+      }
     }
 
-    riskEvents.value.unshift(event)
-
-    // MVP只保留最近5个事件
-    riskEvents.value =
-      riskEvents.value.slice(0, 5)
-
-    console.warn(
-      "产生风险事件：",
-      event,
-    )
+    if (result.event) {
+      const event = {
+        ...result.event,
+        id: `${result.event.type}-${Date.now()}`,
+        displayTime: new Date(result.event.occurredAt).toLocaleTimeString("zh-CN", { hour12: false }),
+      }
+      riskEvents.value.unshift(event)
+      riskEvents.value = riskEvents.value.slice(0, 5)
+    }
   }
 }
-
 
 async function startSimulation() {
   if (!simulator) {
-    mapMessage.value =
-      "定位模拟器尚未初始化"
-
+    mapMessage.value = "定位模拟器尚未初始化"
     return
   }
-
-  // 完成后再次点击开始，自动从头播放
-  if (
-    simulationStatus.value ===
-    "COMPLETED"
-  ) {
+  if (simulationStatus.value === "COMPLETED") {
     resetSimulation()
   }
-
   simulator.start()
 }
-
 
 function pauseSimulation() {
   simulator?.pause()
 }
 
-
 function resetSimulation() {
   simulator?.reset()
-
   passedTrack = []
-
-  geofenceRiskState =
-    createInitialGeofenceRiskState()
-
+  if (demoCreateInitialGeofenceRiskState) {
+    geofenceRiskState = demoCreateInitialGeofenceRiskState()
+  }
   currentPointNumber.value = 0
   currentDistanceMeters.value = 0
   consecutiveOutsideCount.value = 0
-
   riskStatus.value = "SAFE"
   riskEvents.value = []
-
   dynamicTrackLine?.setPath([])
 
-  const firstPoint =
-    simulationPoints[0]
-
-  if (firstPoint && elderMarker) {
-    elderMarker.setPosition([
-      firstPoint.longitude,
-      firstPoint.latitude,
-    ])
-
+  const firstPoint = simulationPoints[0]
+  if (firstPoint && elderMarker && aMapSdk) {
+    elderMarker.setPosition([firstPoint.longitude, firstPoint.latitude])
     elderMarker.setLabel({
       direction: "top",
-      offset: new window.AMap.Pixel(
-        0,
-        -8,
-      ),
+      offset: new aMapSdk.Pixel(0, -8),
       content: "等待开始模拟",
     })
   }
-
-  updateGeofenceAppearance("SAFE")
 }
 
-
-async function initializeMap() {
+async function initializeDemoSimulation() {
   try {
     mapMessage.value = ""
 
@@ -591,136 +468,193 @@ async function initializeMap() {
       return
     }
 
-    if (!isValidGeofence(geofence)) {
-      throw new Error(
-        "电子围栏配置不合法",
-      )
-    }
+    // Lazy load mock & simulator modules only in demo mode
+    const [
+      { servicePoints },
+      { elderTrack },
+      { geofence },
+      { createLocationSimulator },
+      { createInitialGeofenceRiskState, detectGeofenceRisk },
+    ] = await Promise.all([
+      import("../../mock/servicePoints.js"),
+      import("../../mock/track.js"),
+      import("../../mock/geofence.js"),
+      import("../../services/locationSimulator.js"),
+      import("../../domain/risk/geofenceRisk.js"),
+    ])
 
-    simulationPoints =
-      normalizeCoordinateList(elderTrack)
+    demoGeofence = geofence
+    demoDetectGeofenceRisk = detectGeofenceRisk
+    demoCreateInitialGeofenceRiskState = createInitialGeofenceRiskState
+    geofenceRiskState = createInitialGeofenceRiskState()
 
+    simulationPoints = normalizeCoordinateList(elderTrack)
     if (simulationPoints.length === 0) {
-      throw new Error(
-        "没有有效的模拟轨迹点",
-      )
+      throw new Error("没有有效的模拟轨迹点")
+    }
+    totalPoints.value = simulationPoints.length
+    const validServicePoints = normalizeCoordinateList(servicePoints)
+
+    const AMap = await loadAMapSdk()
+    if (isDestroyed || !mapContainer.value) return
+    aMapSdk = AMap
+
+    mapInstance = new AMap.Map(mapContainer.value, {
+      zoom: 15,
+      center: [geofence.center.longitude, geofence.center.latitude],
+    })
+
+    geofenceCircle = new AMap.Circle({
+      center: [geofence.center.longitude, geofence.center.latitude],
+      radius: geofence.radius,
+      strokeColor: "#1677FF",
+      strokeWeight: 3,
+      strokeOpacity: 0.9,
+      fillColor: "#1677FF",
+      fillOpacity: 0.12,
+      zIndex: 10,
+    })
+    mapInstance.add(geofenceCircle)
+
+    dynamicTrackLine = new AMap.Polyline({
+      path: [],
+      strokeColor: "#3366FF",
+      strokeWeight: 6,
+      strokeOpacity: 0.9,
+      lineJoin: "round",
+      lineCap: "round",
+      zIndex: 20,
+    })
+    mapInstance.add(dynamicTrackLine)
+
+    const initialPoint = simulationPoints[0]
+    elderMarker = new AMap.Marker({
+      position: [initialPoint.longitude, initialPoint.latitude],
+      content: createElderIconElement(),
+      anchor: "bottom-center",
+      title: "老人当前位置",
+      zIndex: 100,
+    })
+    elderMarker.setLabel({
+      direction: "top",
+      offset: new AMap.Pixel(0, -8),
+      content: "等待开始模拟",
+    })
+    mapInstance.add(elderMarker)
+
+    const startMarker = new AMap.Marker({
+      position: [initialPoint.longitude, initialPoint.latitude],
+      title: "老人出游起点",
+    })
+    startMarker.setLabel({
+      direction: "bottom",
+      offset: new AMap.Pixel(0, 5),
+      content: "老人出游起点",
+    })
+    mapInstance.add(startMarker)
+
+    const serviceMarkers = validServicePoints.map((point) => {
+      const pointName = point.name ?? "未命名服务点"
+      const marker = new AMap.Marker({
+        position: [point.longitude, point.latitude],
+        title: pointName,
+      })
+      marker.setLabel({
+        direction: "top",
+        offset: new AMap.Pixel(0, -5),
+        content: pointName,
+      })
+      return marker
+    })
+    if (serviceMarkers.length > 0) {
+      mapInstance.add(serviceMarkers)
     }
 
-    const validServicePoints =
-      normalizeCoordinateList(
-        servicePoints,
-      )
-
-    totalPoints.value =
-      simulationPoints.length
-
-    const AMap =
-      await AMapLoader.load({
-        key:
-          import.meta.env.VITE_AMAP_KEY,
-
-        version: "2.0",
-      })
-
-    mapInstance = createMap(AMap)
-
-    geofenceCircle =
-      createGeofenceCircle(
-        AMap,
-        mapInstance,
-      )
-
-    dynamicTrackLine =
-      createDynamicTrackLine(
-        AMap,
-        mapInstance,
-      )
-
-    const initialPoint =
-      simulationPoints[0]
-
-    elderMarker =
-      createElderMarker(
-        AMap,
-        mapInstance,
-        initialPoint,
-      )
-
-    const startMarker =
-      createStartMarker(
-        AMap,
-        mapInstance,
-        initialPoint,
-      )
-
-    const serviceMarkers =
-      createServiceMarkers(
-        AMap,
-        mapInstance,
-        validServicePoints,
-      )
-
-    // 初始化时显示围栏、起点和服务点
     mapInstance.setFitView(
-      [
-        geofenceCircle,
-        startMarker,
-        elderMarker,
-        ...serviceMarkers,
-      ],
-
+      [geofenceCircle, startMarker, elderMarker, ...serviceMarkers],
       false,
       [60, 60, 60, 60],
       17,
     )
 
-    simulator =
-      createLocationSimulator({
-        points: simulationPoints,
-
-        intervalMs: 2000,
-
-        onPoint:
-          handleLocationPoint,
-
-        onStatusChange:
-          (nextStatus) => {
-            simulationStatus.value =
-              nextStatus
-          },
-
-        onComplete: () => {
-          console.log(
-            "定位模拟完成",
-          )
-        },
-      })
-
+    simulator = createLocationSimulator({
+      points: simulationPoints,
+      intervalMs: 2000,
+      onPoint: handleSimulationPoint,
+      onStatusChange: (nextStatus) => {
+        simulationStatus.value = nextStatus
+      },
+      onComplete: () => {
+        console.log("定位模拟完成")
+      },
+    })
     simulatorReady.value = true
-
   } catch (error) {
-    console.error(
-      "地图模块初始化失败：",
-      error,
-    )
-
-    mapMessage.value =
-      error instanceof Error
-        ? error.message
-        : "地图初始化失败"
+    console.error("地图模块初始化失败：", error)
+    mapMessage.value = error instanceof Error ? error.message : "地图初始化失败"
   }
 }
 
+// Watchers for reactive updates in REAL mode
+watch(
+  () => props.latestPoint,
+  (newPoint) => {
+    if (props.realMode) {
+      updateRealMarker(newPoint)
+    }
+  },
+  { deep: true },
+)
 
-onMounted(initializeMap)
+watch(
+  () => props.trackPoints,
+  (newTrack) => {
+    if (props.realMode) {
+      updateRealTrack(newTrack)
+    }
+  },
+  { deep: true },
+)
 
+watch(
+  () => props.status,
+  (newStatus) => {
+    if (props.realMode) {
+      updateRealMarker(props.latestPoint)
+      if (newStatus !== "READY" && dynamicTrackLine) {
+        dynamicTrackLine.setPath([])
+      }
+    }
+  },
+)
 
-/*
- * 离开页面时停止定时器并销毁地图。
- */
+onMounted(() => {
+  if (props.realMode) {
+    void initializeRealMap()
+  } else {
+    void initializeDemoSimulation()
+  }
+})
+
 onUnmounted(() => {
+  isDestroyed = true
+  lifecycleManager?.destroy()
   simulator?.destroy()
+  if (elderMarker && mapInstance) {
+    mapInstance.remove(elderMarker)
+    elderMarker = null
+  }
+  if (dynamicTrackLine && mapInstance) {
+    mapInstance.remove(dynamicTrackLine)
+    dynamicTrackLine = null
+  }
+  if (geofenceCircle && mapInstance) {
+    mapInstance.remove(geofenceCircle)
+    geofenceCircle = null
+  }
   mapInstance?.destroy()
+  mapInstance = null
+  aMapSdk = null
 })
 </script>
 
@@ -733,7 +667,7 @@ onUnmounted(() => {
 
 .map-container {
   width: 100%;
-  height: 600px;
+  height: 100%;
 }
 
 .simulation-panel {
@@ -789,11 +723,14 @@ onUnmounted(() => {
   transform: translateX(-50%);
 
   max-width: calc(100% - 32px);
-  padding: 10px 16px;
+  padding: 8px 14px;
 
+  font-size: 11px;
   color: #333;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid #ddd;
   border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
 }
 </style>

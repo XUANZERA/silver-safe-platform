@@ -2,7 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { showDialog, showSuccessToast } from 'vant'
-import { elderApi, isApiConfigured } from '../../services/api'
+import MapCanvas from '../../components/map/MapCanvas.vue'
+import { elderApi, isApiConfigured, locationApi } from '../../services/api'
+import {
+  convertCanonicalTrack,
+  createLatestLocationCoordinator
+} from '../../services/map/amapCoordinateAdapter'
+import {
+  validateCanonicalLocation,
+  validateCanonicalTrack
+} from '../../services/map/mapLocationMapper'
 import { loadDemoItinerary, realDestinationOrPlaceholder } from '../../services/modeBoundary'
 import { nextFamilyAttentionState } from '../../services/modePresentation'
 import { createPollingController, normalizePollingInterval } from '../../services/polling'
@@ -16,6 +25,11 @@ const stateLoading = ref(false)
 const stateError = ref('')
 const safetyView = ref(null)
 const alerts = ref([])
+const mapStatus = ref('READY')
+const latestMapPoint = ref(null)
+const trackPoints = ref([])
+const locationCoordinator = createLatestLocationCoordinator()
+
 const elder = reactive({
   id: realMode ? null : 1001,
   tripId: null,
@@ -52,10 +66,15 @@ function formatTime(value) {
   return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+let currentLoadGeneration = 0
+
 async function loadAuthoritativeState() {
+  const loadGen = ++currentLoadGeneration
   stateLoading.value = true
   try {
     const elderList = await elderApi.list()
+    if (loadGen !== currentLoadGeneration) return
+
     const currentElder = elderList?.items?.[0]
     if (!currentElder) throw new Error('没有可查看的老人资料')
     const [view, alertList, trip] = await Promise.all([
@@ -63,12 +82,15 @@ async function loadAuthoritativeState() {
       elderApi.alerts(currentElder.id),
       elderApi.currentTrip(currentElder.id)
     ])
+    if (loadGen !== currentLoadGeneration) return
     if (!view) throw new Error('后端未返回安全状态')
 
     const latestLocation = view.latest_location
+    const tripIdSnapshot = trip?.id || null
+
     Object.assign(elder, {
       id: currentElder.id,
-      tripId: trip?.id || null,
+      tripId: tripIdSnapshot,
       name: currentElder.name,
       destination: realDestinationOrPlaceholder(trip),
       location: formatLocation(latestLocation),
@@ -78,8 +100,65 @@ async function loadAuthoritativeState() {
     alerts.value = alertList?.items || []
     stateAvailable.value = true
     stateError.value = ''
+
+    if (latestLocation) {
+      try {
+        const canonical = validateCanonicalLocation(latestLocation)
+        const coordResult = await locationCoordinator.update(canonical)
+        if (loadGen === currentLoadGeneration && !coordResult.discarded) {
+          latestMapPoint.value = coordResult.mapPoint
+          mapStatus.value = 'READY'
+        }
+      } catch (err) {
+        if (loadGen === currentLoadGeneration) {
+          console.warn('地图坐标转换失败', err)
+          latestMapPoint.value = null
+          mapStatus.value = err?.code === 'MAP_UNAVAILABLE' ? 'MAP_UNAVAILABLE' : 'MAP_CONVERSION_FAILED'
+        }
+      }
+    } else {
+      if (loadGen === currentLoadGeneration) {
+        locationCoordinator.reset()
+        latestMapPoint.value = null
+        mapStatus.value = 'NO_LOCATION'
+      }
+    }
+
+    if (trip?.id) {
+      try {
+        const trackRes = await locationApi.track(trip.id)
+        if (loadGen === currentLoadGeneration && elder.tripId === tripIdSnapshot) {
+          if (trackRes?.items?.length) {
+            const canonicalItems = validateCanonicalTrack(trackRes.items)
+            const convertedTrack = await convertCanonicalTrack(canonicalItems)
+            if (loadGen === currentLoadGeneration && elder.tripId === tripIdSnapshot) {
+              trackPoints.value = convertedTrack
+            }
+          } else {
+            trackPoints.value = []
+          }
+        }
+      } catch (err) {
+        if (loadGen === currentLoadGeneration && elder.tripId === tripIdSnapshot) {
+          console.warn('获取近期轨迹失败', err)
+          trackPoints.value = []
+        }
+      }
+    } else {
+      if (loadGen === currentLoadGeneration) {
+        trackPoints.value = []
+      }
+    }
+  } catch (error) {
+    if (loadGen !== currentLoadGeneration) {
+      return
+    }
+    error.loadGen = loadGen
+    throw error
   } finally {
-    stateLoading.value = false
+    if (loadGen === currentLoadGeneration) {
+      stateLoading.value = false
+    }
   }
 }
 
@@ -87,10 +166,17 @@ const polling = createPollingController({
   intervalMs: normalizePollingInterval(import.meta.env.VITE_MONITORING_POLL_INTERVAL_MS),
   task: loadAuthoritativeState,
   onError(error) {
+    if (error?.loadGen && error.loadGen !== currentLoadGeneration) {
+      return
+    }
     stateAvailable.value = false
     stateError.value = error instanceof Error ? error.message : '无法获取最新状态'
     elder.location = '数据不可用'
     elder.update = '无法获取最新状态'
+    mapStatus.value = 'DATA_UNAVAILABLE'
+    latestMapPoint.value = null
+    trackPoints.value = []
+    locationCoordinator.reset()
     console.warn('家属端后端状态同步失败', error)
   }
 })
@@ -108,6 +194,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  currentLoadGeneration++
+  locationCoordinator.reset()
   polling.stop()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
@@ -149,7 +237,16 @@ function toggleDemoAttention() {
         <span class="online" :class="{ unavailable: realMode && !stateAvailable }"><i></i>{{ realMode ? (stateAvailable ? '后端已同步' : '数据不可用') : '演示模式' }}</span>
       </section>
       <section class="location-card">
-        <div class="map-placeholder"><span class="fence"></span><span class="pin"><van-icon name="location" /></span><em>{{ elder.location }}</em></div>
+        <MapCanvas
+          v-if="realMode"
+          :real-mode="true"
+          :latest-point="latestMapPoint"
+          :track-points="trackPoints"
+          :status="mapStatus"
+          :elder-name="elder.name"
+          height="180px"
+        />
+        <div v-else class="map-placeholder"><span class="fence"></span><span class="pin"><van-icon name="location" /></span><em>{{ elder.location }}</em></div>
         <div class="location-info">
           <div><strong>{{ safetyPresentation.trip }}</strong><p>最后定位：{{ elder.update }}</p></div>
           <button type="button" :disabled="stateLoading" @click="refresh"><van-icon name="replay" />{{ stateLoading ? '同步中' : '刷新状态' }}</button>
