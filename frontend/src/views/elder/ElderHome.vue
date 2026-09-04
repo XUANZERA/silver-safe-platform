@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, toRefs, watch } from 'vue'
 import { useRouter } from 'vue-router'
 // FIX START: API 失败时向用户展示后端返回的真实错误。
 import { showConfirmDialog, showDialog, showFailToast, showSuccessToast } from 'vant'
@@ -9,6 +9,14 @@ import { useUserStore } from '../../stores/user'
 import { createLocationUploadCoordinator } from '../../services/location/LocationUploadCoordinator'
 import { createRealLocationProvider, LOCATION_STATUS } from '../../services/location/RealLocationProvider'
 import { mapRealLocationSampleToPayload } from '../../services/location/locationMapper'
+import {
+  applyAuthoritativeCurrentTrip,
+  applyCurrentTripFailure as applyTripFailureState,
+  createElderTripState,
+  isAuthUnavailable,
+  loadAuthoritativeElderTrip,
+  reloadAfterAuthReady
+} from '../../services/elderCurrentTrip'
 import { hasValidRealDestination, loadDemoItinerary, presentElderPlan, realDestinationOrPlaceholder, startTripForMode } from '../../services/modeBoundary'
 import { presentElderTripActionHint } from '../../services/modePresentation'
 import { presentSosFailure, presentSosSuccess, runSosSubmission } from '../../services/sosPresentation'
@@ -28,17 +36,24 @@ import logo from '../../assets/logo.png'
 const router = useRouter()
 const userStore = useUserStore()
 const realMode = isApiConfigured()
-const tripStatus = ref(realMode ? '状态获取中' : '出游中')
 const demoLocationStatus = ref('模拟定位正常')
 const locationTechnicalStatus = ref(LOCATION_STATUS.IDLE)
 const locationLifecycleActive = ref(false)
 const showMore = ref(false)
 const showAiPlan = ref(false)
 // FIX START: 单独保存行程 ID，不能把老人 ID 当成行程 ID。
-const currentTripId = ref(null)
-const currentTripBackendStatus = ref(realMode ? null : 'active')
-const currentTrip = ref(realMode ? null : { id: 5001, destination: '天坛公园慢游', status: 'active' })
-const tripDataAvailable = ref(!realMode)
+const tripState = reactive(createElderTripState({
+  realMode,
+  demoTrip: { id: 5001, destination: '天坛公园慢游', status: 'active' }
+}))
+const {
+  currentTrip,
+  currentTripId,
+  currentTripBackendStatus,
+  tripDataAvailable,
+  tripLoadError,
+  tripStatus
+} = toRefs(tripState)
 const createTripVisible = ref(false)
 const destinationInput = ref('')
 const creatingTrip = ref(false)
@@ -81,19 +96,46 @@ const locationStatus = computed(() => {
   if (!realMode) return demoLocationStatus.value
   const labels = {
     [LOCATION_STATUS.IDLE]: '未开启',
-    [LOCATION_STATUS.REQUESTING]: '正在请求定位权限',
+    [LOCATION_STATUS.REQUESTING]: '等待定位授权',
     [LOCATION_STATUS.TRACKING]: '定位守护运行中',
     [LOCATION_STATUS.DEGRADED]: '定位暂不可用',
-    [LOCATION_STATUS.PERMISSION_DENIED]: '定位权限被拒绝',
+    [LOCATION_STATUS.PERMISSION_DENIED]: '定位权限未开启',
     [LOCATION_STATUS.UNSUPPORTED]: '当前浏览器不支持定位'
   }
   return labels[locationTechnicalStatus.value] || '定位暂不可用'
 })
+const locationStatusDescription = computed(() => {
+  if (!realMode) {
+    return isTripActive.value ? '演示：显示模拟位置' : '演示：开始后显示模拟定位'
+  }
+  if (locationTechnicalStatus.value === LOCATION_STATUS.REQUESTING) {
+    return '请允许浏览器访问您的位置；若未看到提示，请点击地址栏左侧的定位图标。'
+  }
+  if (locationTechnicalStatus.value === LOCATION_STATUS.PERMISSION_DENIED) {
+    return '请在浏览器的网站权限中允许定位后再试。'
+  }
+  return null
+})
 const locationActionLabel = computed(() => (
   locationLifecycleActive.value ? '关闭定位守护' : '开启定位守护'
 ))
+const realLocationNotice = computed(() => (
+  locationTechnicalStatus.value === LOCATION_STATUS.IDLE
+    ? '页面刷新后需重新开启定位守护。'
+    : '定位守护需要保持页面运行。'
+))
 
-const locationProvider = realMode ? createRealLocationProvider() : null
+const locationProvider = realMode
+  ? createRealLocationProvider({
+      onDiagnostic: ({ errorCode, internalErrorCategory, permissionState }) => {
+        console.info('REAL geolocation diagnostic', {
+          errorCode,
+          internalErrorCategory,
+          permissionState
+        })
+      }
+    })
+  : null
 const locationCoordinator = realMode
   ? createLocationUploadCoordinator({
       upload: (tripId, payload) => locationApi.upload(tripId, payload),
@@ -149,27 +191,15 @@ function applySavedItinerary() {
 
 function applyCurrentTrip(trip) {
   if (realMode && trip?.status !== 'active') stopRealLocation()
-  currentTrip.value = trip
-  currentTripId.value = trip?.id ?? null
-  currentTripBackendStatus.value = trip?.status ?? null
+  applyAuthoritativeCurrentTrip(tripState, trip)
   elder.destination = realDestinationOrPlaceholder(trip, '')
-  tripDataAvailable.value = true
-
-  if (!trip) {
-    tripStatus.value = '暂无进行中的真实行程'
-  } else {
-    tripStatus.value = trip.status === 'active' ? '出游中' : '待出发'
-  }
+  tripState.destination = elder.destination
 }
 
-function applyCurrentTripFailure() {
+function applyCurrentTripFailure(error) {
   stopRealLocation()
-  currentTrip.value = null
-  currentTripId.value = null
-  currentTripBackendStatus.value = null
-  elder.destination = ''
-  tripDataAvailable.value = false
-  tripStatus.value = '行程状态不可用'
+  applyTripFailureState(tripState, error)
+  elder.destination = tripState.destination
 }
 
 async function loadCurrentTrip() {
@@ -179,9 +209,25 @@ async function loadCurrentTrip() {
     applyCurrentTrip(trip)
     return trip
   } catch (error) {
-    applyCurrentTripFailure()
+    applyCurrentTripFailure(error)
     throw error
   }
+}
+
+async function loadElderHomeData() {
+  return loadAuthoritativeElderTrip({
+    state: tripState,
+    listElders: elderApi.list,
+    getCurrentTrip: elderApi.currentTrip,
+    onElder: (current) => {
+      Object.assign(elder, { id: current.id, name: current.name, age: current.age ?? '--' })
+    }
+  }).then((result) => {
+    if (result.trip?.status !== 'active') stopRealLocation()
+    elder.destination = realDestinationOrPlaceholder(result.trip, '')
+    tripState.destination = elder.destination
+    return result
+  })
 }
 
 onMounted(async () => {
@@ -190,13 +236,17 @@ onMounted(async () => {
     return
   }
   try {
-    const list = await elderApi.list()
-    const current = list?.items?.[0]
-    if (!current) throw new Error('没有可用的老人资料')
-    Object.assign(elder, { id: current.id, name: current.name, age: current.age ?? '--' })
-    await loadCurrentTrip()
+    await reloadAfterAuthReady({
+      ensureAuthReady: userStore.ensureAuthReady,
+      reload: loadElderHomeData
+    })
   } catch (error) {
-    applyCurrentTripFailure()
+    if (tripLoadError.value !== error) applyCurrentTripFailure(error)
+    if (isAuthUnavailable(error)) {
+      userStore.logout()
+      await router.replace('/login')
+      return
+    }
     console.warn('老人端后端数据加载失败', error)
   }
 })
@@ -390,7 +440,7 @@ function go(path) { router.push(path) }
     <main class="elder-content">
       <section class="status-card"><div class="status-icon"><van-icon :name="isTripActive ? 'location-o' : 'home-o'" /></div><div><small>当前状态</small><strong>{{ tripStatus }}</strong><p v-if="isTripActive && hasUsableDestination">正在前往：{{ elder.destination }}</p><p v-else-if="realMode && !tripDataAvailable">后端行程数据不可用</p><p v-else-if="realMode && currentTrip && !hasUsableDestination">行程目的地无效，请先设置真实目的地</p><p v-else-if="realMode && currentTrip">待出发：{{ elder.destination }}</p><p v-else>{{ realMode ? '当前没有进行中的真实行程' : '欢迎回家，今天辛苦了' }}</p></div><span :class="['status-dot', { off: !isTripActive }]" /></section>
       <!-- FIX START: 显示脚本中随 API 行程状态更新的 locationStatus。 -->
-      <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p>{{ realMode ? '定位守护需要保持页面运行。' : (isTripActive ? '演示：显示模拟位置' : '演示：开始后显示模拟定位') }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
+      <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p v-if="locationStatusDescription">{{ locationStatusDescription }}</p><p v-if="realMode">{{ realLocationNotice }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
       <button v-if="showRealLocationControl" class="location-action" type="button" @click="toggleRealLocation"><van-icon :name="locationLifecycleActive ? 'pause-circle-o' : 'aim'" />{{ locationActionLabel }}</button>
       <!-- FIX END: 显示真实的 locationStatus。 -->
       <button class="plan-card" type="button" @click="go('/schedule')"><div class="plan-title"><div><small>今日出游计划</small><strong>{{ planPresentation.title }}</strong></div><van-icon name="arrow" /></div><template v-if="planPresentation.kind === 'demo'"><div class="plan-row"><span><b>08:30</b><small>专车到家</small></span><i></i><span><b>09:00</b><small>到达公园</small></span><i></i><span><b>15:30</b><small>专车回家</small></span></div><p><van-icon name="info-o" /> 演示：沿平整步道游览，途中有休息区</p></template><p v-else-if="planPresentation.kind === 'ready'"><van-icon name="info-o" /> 目的地来自后端；当前接口未提供详细时间安排</p><p v-else><van-icon name="info-o" /> {{ planPresentation.title }}</p></button>
