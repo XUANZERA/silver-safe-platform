@@ -13,7 +13,6 @@ class LocationHealth(StrEnum):
     FRESH = "FRESH"
     STALE = "STALE"
     INACCURATE = "INACCURATE"
-    FRESHNESS_TBD = "FRESHNESS_TBD"
 
 
 class RiskStatus(StrEnum):
