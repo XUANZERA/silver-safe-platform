@@ -47,3 +47,20 @@ test('SOS-DOUBLE-001 synchronous duplicate submission calls backend once', async
   })
   assert.equal(pending, false)
 })
+
+test('EMERGENCY-001 SOS remains a backend submission, not a phone action', async () => {
+  let pending = false
+  let backendSosCalls = 0
+  const result = await runSosSubmission({
+    isPending: () => pending,
+    setPending: (value) => { pending = value },
+    submit: async () => {
+      backendSosCalls += 1
+      return { id: 73, status: 'new' }
+    }
+  })
+
+  assert.equal(backendSosCalls, 1)
+  assert.deepEqual(result.value, { id: 73, status: 'new' })
+  assert.doesNotMatch(presentSosSuccess(result.value), /tel:|拨号|电话/)
+})

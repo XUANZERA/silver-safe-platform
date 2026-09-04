@@ -7,7 +7,8 @@ import { alertHistory, alerts as alertSeed, elders as elderSeed, operatorOvervie
 import AlertsPanel from './AlertsPanel.vue'
 import EldersPanel from './EldersPanel.vue'
 import TripsPanel from './TripsPanel.vue'
-import { alertApi, elderApi, isApiConfigured } from '../../services/api'
+import { alertApi, elderApi, isApiConfigured, logoutRequest } from '../../services/api'
+import { logoutForMode } from '../../services/modeBoundary'
 import {
   replaceAuthoritativeOperatorSnapshot,
   runOperatorAlertAction,
@@ -128,9 +129,9 @@ function onTripEnded(name) {
 }
 function refreshOperatorAlerts() { return alertPolling.refreshAfterCurrent() }
 
-function logout() {
-  userStore.logout()
-  router.replace('/login')
+async function logout() {
+  await logoutForMode({ realMode, logoutRemote: logoutRequest, clearLocal: userStore.logout })
+  await router.replace('/login')
 }
 </script>
 
@@ -138,17 +139,17 @@ function logout() {
   <div class="operator-page">
     <p v-if="realMode && !operatorDataAvailable" class="operator-error">告警数据不可用：{{ operatorError || '无法获取最新状态' }}</p>
     <AlertsPanel v-if="activeNav === 'alerts'" :alerts="alerts" :real-mode="realMode" :refresh-alerts="refreshOperatorAlerts" @changed="onAlertChanged" />
-    <EldersPanel v-else-if="activeNav === 'elders'" :elders="elders" @show-trips="activeNav = 'trips'" />
+    <EldersPanel v-else-if="activeNav === 'elders'" :elders="elders" :real-mode="realMode" @show-trips="activeNav = 'trips'" />
     <TripsPanel v-else-if="activeNav === 'trips' && !realMode" :trips="trips" @ended="onTripEnded" />
     <section v-else-if="activeNav === 'trips'" class="trip-source-unavailable"><h1>出游管理</h1><p>真实行程数据尚未接入</p></section>
     <template v-else>
     <header class="operator-header">
       <div class="header-row">
         <div class="brand-line"><span>银</span><strong>银发独游</strong></div>
-        <div class="header-actions"><button type="button" aria-label="查看运营账号" @click="showAccount = true"><van-icon name="manager-o" /></button><button type="button" aria-label="退出演示账号" @click="logout"><van-icon name="sign" /></button></div>
+        <div class="header-actions"><button type="button" aria-label="查看运营账号" @click="showAccount = true"><van-icon name="manager-o" /></button><button type="button" aria-label="退出账号" @click="logout"><van-icon name="sign" /></button></div>
       </div>
       <p>{{ currentTime }}</p>
-      <h1>早上好，{{ userStore.userInfo.displayName }}</h1>
+      <h1>早上好，{{ userStore.userInfo.displayName || userStore.userInfo.username }}</h1>
       <div class="identity"><span></span>平台运营员 · 在线</div>
     </header>
 
@@ -195,7 +196,7 @@ function logout() {
     <nav class="bottom-nav" aria-label="运营端主导航">
       <button v-for="item in navItems" :key="item.key" :class="{ active: activeNav === item.key }" type="button" @click="selectNav(item)"><span><van-icon :name="item.icon" /><em v-if="item.key === 'alerts' && unresolvedAlertCount">{{ unresolvedAlertCount }}</em></span><small>{{ item.label }}</small></button>
     </nav>
-    <van-popup v-model:show="showAccount" position="bottom" round :style="{ padding: '22px 18px 30px' }"><div class="account-sheet"><div class="account-title"><span>岚</span><div><h2>{{ userStore.userInfo.displayName }}</h2><p>平台运营员 · {{ userStore.userInfo.username }}</p></div></div><van-cell-group inset><van-cell title="账号身份" value="运营端"/><van-cell title="联系电话" :value="userStore.userInfo.phone"/><van-cell title="登录状态" value="演示会话有效"/></van-cell-group><van-button block round plain type="primary" @click="logout">退出登录</van-button><p>账号及电话均为虚构演示信息</p></div></van-popup>
+    <van-popup v-model:show="showAccount" position="bottom" round :style="{ padding: '22px 18px 30px' }"><div class="account-sheet"><div class="account-title"><span>{{ (userStore.userInfo.displayName || userStore.userInfo.username || '运').slice(0, 1) }}</span><div><h2>{{ userStore.userInfo.displayName || userStore.userInfo.username }}</h2><p>平台运营员 · {{ userStore.userInfo.username }}</p></div></div><van-cell-group inset><van-cell title="账号身份" value="运营端"/><van-cell title="联系电话" :value="userStore.userInfo.phone || '未提供'"/><van-cell title="登录状态" :value="realMode ? '后端认证会话' : '演示会话有效'"/></van-cell-group><van-button block round plain type="primary" @click="logout">退出登录</van-button><p>{{ realMode ? '真实模式 · 账号信息来自后端登录响应' : '账号及电话均为虚构演示信息' }}</p></div></van-popup>
   </div>
 </template>
 

@@ -118,16 +118,9 @@ import {
   detectGeofenceRisk,
 } from "../../domain/risk/geofenceRisk.js"
 
-// FIX START: 仿真页面接入现有行程与定位 API，字段映射留在服务层。
 import {
-  elderApi,
   isApiConfigured,
-  locationApi,
 } from "../../services/api.js"
-import {
-  createSimulationLocationPayload,
-} from "../../services/simulationLocation.js"
-// FIX END: 仿真页面接入现有行程与定位 API。
 
 
 const mapMessage = ref("")
@@ -157,12 +150,6 @@ let simulator = null
 
 let simulationPoints = []
 let passedTrack = []
-
-// FIX START: 保存本次仿真对应的后端行程和有序上传队列。
-let activeTripId = null
-let simulationRunId = Date.now().toString(36)
-let uploadQueue = Promise.resolve()
-// FIX END: 保存后端行程和有序上传队列。
 
 let geofenceRiskState =
   createInitialGeofenceRiskState()
@@ -431,60 +418,6 @@ function updateGeofenceAppearance(status) {
 }
 
 
-// FIX START: 查找当前老人正在进行的行程，并按顺序上传每个模拟点。
-async function prepareSimulationUpload() {
-  if (!isApiConfigured()) {
-    activeTripId = null
-    return true
-  }
-
-  try {
-    const elders = await elderApi.list()
-    const currentElder = elders?.items?.[0]
-    if (!currentElder) throw new Error("没有可用于仿真的老人资料")
-
-    const trip = await elderApi.currentTrip(currentElder.id)
-    if (!trip || trip.status !== "active") {
-      throw new Error("请先在老人首页开始行程，再运行定位仿真")
-    }
-
-    activeTripId = trip.id
-    mapMessage.value = ""
-    return true
-  } catch (error) {
-    activeTripId = null
-    mapMessage.value = error instanceof Error ? error.message : "无法读取当前行程"
-    return false
-  }
-}
-
-
-function queueSimulationUpload(point, pointIndex) {
-  if (!isApiConfigured() || !activeTripId) {
-    return
-  }
-
-  const tripId = activeTripId
-  const payload = createSimulationLocationPayload({
-    tripId,
-    runId: simulationRunId,
-    sequence: pointIndex + 1,
-    point,
-  })
-
-  uploadQueue = uploadQueue
-    .then(() => locationApi.upload(tripId, payload))
-    .then((response) => {
-      console.info("模拟定位已上传：", response)
-    })
-    .catch((error) => {
-      console.error("模拟定位上传失败：", error)
-      mapMessage.value = `第 ${pointIndex + 1} 个模拟点上传失败：${error instanceof Error ? error.message : "请求失败"}`
-    })
-}
-// FIX END: 查找当前行程并按顺序上传模拟点。
-
-
 /**
  * 每收到一个模拟定位点时执行。
  */
@@ -551,10 +484,6 @@ function handleLocationPoint(
     result.status,
   )
 
-  // FIX START: 本地展示完成后，将同一个模拟点上传给后端。
-  queueSimulationUpload(point, pointIndex)
-  // FIX END: 将模拟点上传给后端。
-
   // 6. 首次达到连续3点越界时产生事件
   if (result.event) {
     const event = {
@@ -604,13 +533,6 @@ async function startSimulation() {
     resetSimulation()
   }
 
-  // FIX START: 配置了真实 API 时，没有 active trip 就不发送伪造行程数据。
-  if (isApiConfigured() && !activeTripId) {
-    const readyToUpload = await prepareSimulationUpload()
-    if (!readyToUpload) return
-  }
-  // FIX END: 启动前确认后端 active trip。
-
   simulator.start()
 }
 
@@ -622,10 +544,6 @@ function pauseSimulation() {
 
 function resetSimulation() {
   simulator?.reset()
-
-  // FIX START: 每次重放使用新的幂等键前缀，避免与上一次仿真冲突。
-  simulationRunId = Date.now().toString(36)
-  // FIX END: 每次重放使用新的幂等键前缀。
 
   passedTrack = []
 
@@ -667,6 +585,11 @@ function resetSimulation() {
 async function initializeMap() {
   try {
     mapMessage.value = ""
+
+    if (isApiConfigured()) {
+      mapMessage.value = "定位仿真仅在演示模式可用，不会作为真实定位数据上传"
+      return
+    }
 
     if (!isValidGeofence(geofence)) {
       throw new Error(
@@ -775,9 +698,6 @@ async function initializeMap() {
 
     simulatorReady.value = true
 
-    // FIX START: 地图可用后预加载 active trip；失败不破坏本地地图初始化。
-    await prepareSimulationUpload()
-    // FIX END: 预加载 active trip。
   } catch (error) {
     console.error(
       "地图模块初始化失败：",

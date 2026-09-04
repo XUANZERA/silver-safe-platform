@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { showDialog, showSuccessToast } from 'vant'
 import { elderApi, isApiConfigured } from '../../services/api'
+import { loadDemoItinerary, realDestinationOrPlaceholder } from '../../services/modeBoundary'
 import { nextFamilyAttentionState } from '../../services/modePresentation'
 import { createPollingController, normalizePollingInterval } from '../../services/polling'
 import { presentAlertWorkflow, presentRisk, presentSafety } from '../../services/safetyPresentation'
@@ -21,7 +22,7 @@ const elder = reactive({
   name: realMode ? '老人' : '张建国',
   location: realMode ? '等待后端数据' : '天坛公园东门附近',
   update: realMode ? '尚未同步' : '刚刚',
-  destination: realMode ? '暂无行程' : '天坛公园慢游'
+  destination: realMode ? '暂无真实行程' : '天坛公园慢游'
 })
 
 const safetyPresentation = computed(() => realMode
@@ -36,12 +37,9 @@ const riskPresentation = computed(() => presentRisk(safetyView.value, stateAvail
 const alertPresentation = computed(() => presentAlertWorkflow(latestOpenAlert.value, stateAvailable.value))
 
 function applySavedItinerary() {
-  if (realMode) return
-  try {
-    const items = JSON.parse(sessionStorage.getItem('helpingold-itinerary') || '[]')
-    const destinationItem = items[1] || items[0]
-    if (destinationItem?.title) elder.destination = destinationItem.title
-  } catch { sessionStorage.removeItem('helpingold-itinerary') }
+  const items = loadDemoItinerary(realMode, sessionStorage)
+  const destinationItem = items?.[1] || items?.[0]
+  if (destinationItem?.title) elder.destination = destinationItem.title
 }
 
 function formatLocation(location) {
@@ -72,7 +70,7 @@ async function loadAuthoritativeState() {
       id: currentElder.id,
       tripId: trip?.id || null,
       name: currentElder.name,
-      destination: trip?.destination || '暂无行程',
+      destination: realDestinationOrPlaceholder(trip),
       location: formatLocation(latestLocation),
       update: formatTime(latestLocation?.recorded_at)
     })
@@ -127,7 +125,7 @@ async function refresh() {
 
 function call() {
   showDialog({
-    title: '联系老人',
+    title: '老人联系信息',
     message: realMode ? '当前版本暂未接入拨号功能。' : '演示环境不会拨打真实电话。',
     confirmButtonText: '知道了'
   })
@@ -185,7 +183,7 @@ function toggleDemoAttention() {
       </section>
       <section class="child-actions">
         <button type="button" @click="router.push('/schedule')"><span class="purple"><van-icon name="todo-list-o"/></span><strong>查看出游计划</strong><small>了解今天的安排</small></button>
-        <button type="button" @click="call"><span class="red"><van-icon name="phone-o"/></span><strong>联系老人</strong><small>{{ realMode ? '拨号能力暂未接入' : '电话为脱敏演示号码' }}</small></button>
+        <button type="button" @click="call"><span class="red"><van-icon name="records-o"/></span><strong>查看老人联系信息</strong><small>{{ realMode ? '当前接口未提供可拨号码' : '电话为脱敏演示号码' }}</small></button>
       </section>
       <button v-if="!realMode" class="alert-button" type="button" @click="toggleDemoAttention"><van-icon name="warning-o"/> {{ activeAlert ? '已开启演示重点关注' : '开启演示重点关注' }}</button>
       <p v-else class="attention-unavailable">重点关注功能尚未接入</p>

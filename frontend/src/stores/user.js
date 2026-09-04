@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { isApiConfigured } from '../services/api'
+import { sessionMatchesMode } from '../services/modeBoundary'
 
 export const useUserStore = defineStore('user', () => {
   const userInfo = ref({})
@@ -15,7 +17,12 @@ export const useUserStore = defineStore('user', () => {
     const info = sessionStorage.getItem('userInfo')
     if (info) {
       try {
-        userInfo.value = JSON.parse(info)
+        const parsed = JSON.parse(info)
+        if (!sessionMatchesMode(parsed, isApiConfigured())) {
+          sessionStorage.removeItem('userInfo')
+          return userInfo.value
+        }
+        userInfo.value = parsed
         isLoggedIn.value = true
       } catch {
         sessionStorage.removeItem('userInfo')

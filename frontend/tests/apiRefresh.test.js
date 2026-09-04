@@ -112,3 +112,31 @@ test('AUTH-REFRESH-004 retries an original request only once', async () => {
   assert.equal(refreshCalls, 1)
   assert.equal(resourceCalls, 2)
 })
+
+test('AUTH-LOGOUT-001 calls backend logout and clears the access token even on failure', async () => {
+  const calls = []
+  const client = createApiClient({
+    baseUrl: 'https://api.test',
+    fetchImpl: async (url, options) => {
+      const path = new URL(url).pathname
+      calls.push({ path, authorization: options.headers.Authorization })
+      if (path === '/auth/login') {
+        return jsonResponse(200, { data: { access_token: 'operator-token', user: { id: 9 } } })
+      }
+      if (path === '/auth/logout') {
+        return jsonResponse(503, { error: { message: 'backend unavailable' } })
+      }
+      return jsonResponse(200, { data: { ok: true } })
+    }
+  })
+
+  await client.loginRequest('operator01', 'secret')
+  await assert.rejects(client.logoutRequest(), /backend unavailable/)
+  await client.request('/after-logout', {}, false)
+
+  assert.deepEqual(calls, [
+    { path: '/auth/login', authorization: undefined },
+    { path: '/auth/logout', authorization: 'Bearer operator-token' },
+    { path: '/after-logout', authorization: undefined }
+  ])
+})

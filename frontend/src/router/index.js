@@ -4,6 +4,8 @@ import {
 } from 'vue-router'
 import routes from './routes'
 import { useUserStore } from '../stores/user'
+import { isApiConfigured } from '../services/api'
+import { demoOnlyRedirect, homePathForRole } from '../services/modeBoundary'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -16,8 +18,12 @@ router.beforeEach((to) => {
   }
 
   const userStore = useUserStore()
+  if (to.meta?.demoOnly) {
+    const redirect = demoOnlyRedirect(isApiConfigured(), userStore.isLoggedIn ? userStore.userInfo : null)
+    if (redirect) return redirect
+  }
   if (to.name === 'Login' && userStore.isLoggedIn) {
-    return userStore.userInfo.role === 'operator' ? '/operator' : userStore.userInfo.role === 'family' ? '/child' : '/elder'
+    return homePathForRole(userStore.userInfo.role)
   }
   if (to.meta?.requiresOperator) {
     if (!userStore.isLoggedIn) return '/login'
@@ -26,8 +32,7 @@ router.beforeEach((to) => {
   if (to.meta?.allowedRoles) {
     if (!userStore.isLoggedIn) return '/login'
     if (!to.meta.allowedRoles.includes(userStore.userInfo.role)) {
-      const home = userStore.userInfo.role === 'operator' ? '/operator' : userStore.userInfo.role === 'family' ? '/child' : '/elder'
-      return home
+      return homePathForRole(userStore.userInfo.role)
     }
   }
 

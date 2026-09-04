@@ -4,10 +4,12 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { isApiConfigured, loginRequest } from '../services/api'
+import { loginForMode } from '../services/modeBoundary'
 import logo from '../assets/logo.png'
 
 const router = useRouter()
 const userStore = useUserStore()
+const realMode = isApiConfigured()
 
 // 表单数据
 const formData = reactive({
@@ -22,44 +24,19 @@ const rememberMe = ref(false)
 const onSubmit = async () => {
   loading.value = true
   try {
-    if (isApiConfigured()) {
-      const user = await loginRequest(formData.username, formData.password)
-      userStore.setUserInfo({ ...user, path: user.role === 'operator' ? '/operator' : user.role === 'family' ? '/child' : '/elder' })
-      showSuccessToast('登录成功')
-      await router.push(userStore.userInfo.path)
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 650))
-    const accounts = {
-      operator01: { id: 9001, username: 'operator01', displayName: '林晓岚', role: 'operator', phone: '188****2608', path: '/operator' },
-      elder01: { id: 1001, username: 'elder01', displayName: '张建国', role: 'elder', phone: '138****4031', path: '/elder' },
-      child01: { id: 2001, username: 'child01', displayName: '张小明', role: 'family', phone: '138****2256', path: '/child' },
-      family01: { id: 2001, username: 'family01', displayName: '张小明', role: 'family', phone: '138****2256', path: '/child' },
-    }
-    const account = accounts[formData.username]
-    if (!account || formData.password !== 'demo123') {
-      throw new Error('invalid demo account')
-    }
-    userStore.setUserInfo(account)
+    if (!realMode) await new Promise((resolve) => setTimeout(resolve, 650))
+    const account = await loginForMode({
+      realMode,
+      username: formData.username,
+      password: formData.password,
+      login: loginRequest,
+      saveSession: userStore.setUserInfo
+    })
     showSuccessToast('登录成功')
     await router.push(account.path)
   } catch (error) {
-    // Keep the three local demo accounts usable when the temporary backend
-    // tunnel is unavailable; real credentials are never accepted here.
-    const demoAccounts = {
-      operator01: { id: 9001, username: 'operator01', displayName: '林晓岚', role: 'operator', phone: '188****2608', path: '/operator' },
-      elder01: { id: 1001, username: 'elder01', displayName: '张建国', role: 'elder', phone: '138****4031', path: '/elder' },
-      child01: { id: 2001, username: 'child01', displayName: '张小明', role: 'family', phone: '138****2256', path: '/child' },
-    }
-    const account = demoAccounts[formData.username]
-    const networkFailure = /fetch|网络|请求失败|服务不可用/i.test(error?.message || '')
-    if (isApiConfigured() && networkFailure && account && formData.password === 'demo123') {
-      userStore.setUserInfo(account)
-      showSuccessToast('演示登录成功（后端暂时不可用）')
-      await router.push(account.path)
-      return
-    }
-    showFailToast('演示账号或密码不正确')
+    const detail = error instanceof Error ? error.message : '请求失败'
+    showFailToast(realMode ? `登录失败：${detail}` : '演示账号或密码不正确')
   } finally {
     loading.value = false
   }
@@ -144,8 +121,8 @@ function fillDemoAccount(username) {
         </div>
       </van-form>
 
-      <div class="demo-title"><span class="demo-dot"></span>选择演示身份</div>
-      <div class="demo-accounts">
+      <div v-if="!realMode" class="demo-title"><span class="demo-dot"></span>选择演示身份</div>
+      <div v-if="!realMode" class="demo-accounts">
         <button v-for="account in demoAccounts" :key="account.username" class="demo-account" type="button" @click="fillDemoAccount(account.username)">
           <span class="demo-role">{{ account.role }}</span>
           <strong>{{ account.username }}</strong>
@@ -153,7 +130,7 @@ function fillDemoAccount(username) {
         </button>
       </div>
       <p class="role-note">登录后将根据账号身份自动进入对应页面</p>
-      <p class="demo-note">本页面仅使用虚构数据进行产品演示</p>
+      <p class="demo-note">{{ realMode ? '真实模式 · 登录失败不会切换到本地演示账号' : '演示模式 · 本页面仅使用虚构数据进行产品演示' }}</p>
     </div>
   </div>
 </template>

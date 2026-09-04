@@ -5,11 +5,19 @@
     <header class="schedule-header">
       <button class="back-button" type="button" @click="router.push(homePath)"><van-icon name="arrow-left" /></button>
       <h1 class="schedule-title">旅游行程单</h1>
-      <button class="edit-button" type="button" @click="editing ? cancelEdit() : startEdit()">{{ editing ? '取消' : '编辑' }}</button>
+      <button v-if="!realMode" class="edit-button" type="button" @click="editing ? cancelEdit() : startEdit()">{{ editing ? '取消' : '编辑' }}</button>
     </header>
 
-    <!-- 适老化时间轴区域 -->
-    <div class="timeline-wrapper">
+    <section v-if="realMode" :class="['real-schedule-state', realSchedulePresentation.kind]">
+      <van-icon :name="realSchedulePresentation.kind === 'error' ? 'warning-o' : realSchedulePresentation.kind === 'ready' ? 'location-o' : 'todo-list-o'" />
+      <h2>{{ realSchedulePresentation.title }}</h2>
+      <p>{{ realSchedulePresentation.detail }}</p>
+      <dl v-if="realTrip"><div><dt>Trip ID</dt><dd>#{{ realTrip.id }}</dd></div><div><dt>后端状态</dt><dd>{{ realTrip.status }}</dd></div></dl>
+      <small v-if="realTrip">当前接口只返回 Trip 目的地与状态，未提供详细时间安排。</small>
+    </section>
+
+    <!-- Demo 模式下保留本地可编辑时间轴。 -->
+    <div v-else class="timeline-wrapper">
       <!-- 这里可以使用 v-for 循环渲染你的行程数据 -->
       <div class="timeline-item" v-for="(item, index) in itinerary" :key="`${item.time}-${index}`">
         <!-- 左侧时间轴节点 -->
@@ -40,11 +48,11 @@
         </div>
       </div>
     </div>
-    <div v-if="editing" class="edit-actions"><button type="button" @click="addItem"><van-icon name="plus" /> 新增行程</button><button class="save" type="button" @click="saveEdit">保存行程</button></div>
+    <div v-if="!realMode && editing" class="edit-actions"><button type="button" @click="addItem"><van-icon name="plus" /> 新增行程</button><button class="save" type="button" @click="saveEdit">保存演示行程</button></div>
 
     <!-- 右下角悬浮应急按钮 -->
     <button class="emergency-fab" type="button" @click="showEmergencyInfo">
-      <van-icon name="phone-o" /> 紧急联系家人
+      <van-icon name="records-o" /> {{ contactPresentation.label }}
     </button>
     <nav class="elder-nav" aria-label="端内导航"><button type="button" @click="router.push(homePath)"><van-icon name="home-o" /><small>首页</small></button><button class="active" type="button"><van-icon name="todo-list-o" /><small>行程</small></button><button type="button" @click="router.push(profilePath)"><van-icon name="manager-o" /><small>我的</small></button></nav>
   </div>
@@ -52,26 +60,30 @@
 
 <script setup>
 // 预留你的业务逻辑和数据绑定位置
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { showDialog, showSuccessToast } from 'vant'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import logo from '../../assets/logo.png'
 import { elderApi, isApiConfigured } from '../../services/api'
+import { createDemoItinerary, emergencyContactPresentation, loadDemoItinerary, presentRealSchedule } from '../../services/modeBoundary'
 const router = useRouter()
 const userStore = useUserStore()
+const realMode = isApiConfigured()
 const homePath = userStore.userInfo.role === 'family' ? '/child' : '/elder'
 const profilePath = userStore.userInfo.role === 'family' ? '/child/profile' : '/elder/profile'
-const destination = ref('天坛公园慢游')
 const editing = ref(false)
 let editSnapshot = ''
-let hasSavedItinerary = false
-
-const itinerary = reactive([
-  { time: '08:30', title: '集合出发', transport: '🚗 专车直达（约30分钟）', description: '服务人员到家接送，确认随身物品后前往天坛公园。', tips: [{ text: '🛋️ 专人陪同', type: 'safe' }, { text: '📞 家人可查看位置', type: 'safe' }] },
-  { time: '09:00', title: '天坛公园慢游', transport: '🚶 平缓步道', description: '沿平整步道游览祈年殿，园区路况平缓，空气极佳。', tips: [{ text: '🛋️ 沿途有休息区', type: 'safe' }, { text: '🚶‍♂️ 全程平缓步道', type: 'safe' }, { text: '⚠️ 每小时休息15分钟', type: 'warning' }] },
-  { time: '15:30', title: '返程回家', transport: '🚗 专车送回', description: '结束游览后由原车送回家，抵达后通知家人。', tips: [{ text: '✅ 已安排返程', type: 'safe' }, { text: '📞 抵达自动提醒', type: 'safe' }] }
-])
+const itinerary = reactive(realMode ? [] : createDemoItinerary())
+const realTrip = ref(null)
+const realScheduleStatus = ref(realMode ? 'loading' : 'demo')
+const realScheduleError = ref('')
+const realSchedulePresentation = computed(() => presentRealSchedule({
+  loading: realScheduleStatus.value === 'loading',
+  error: realScheduleError.value,
+  trip: realTrip.value
+}))
+const contactPresentation = emergencyContactPresentation(realMode)
 
 function startEdit() {
   editSnapshot = JSON.stringify(itinerary)
@@ -93,39 +105,40 @@ function removeItem(index) {
 }
 
 function saveEdit() {
+  if (realMode) return
   const invalid = itinerary.some((item) => !item.time.trim() || !item.title.trim())
   if (invalid) return showDialog({ title: '请补充信息', message: '每项行程都需要填写时间和名称。' })
   sessionStorage.setItem('helpingold-itinerary', JSON.stringify(itinerary))
   editing.value = false
-  showSuccessToast('行程已保存并同步展示')
+  showSuccessToast('演示行程已保存并同步展示')
 }
 
 onMounted(async () => {
-  const saved = sessionStorage.getItem('helpingold-itinerary')
-  if (saved) {
-    try { itinerary.splice(0, itinerary.length, ...JSON.parse(saved)); hasSavedItinerary = true } catch { sessionStorage.removeItem('helpingold-itinerary') }
+  if (!realMode) {
+    const saved = loadDemoItinerary(realMode, sessionStorage)
+    if (saved) itinerary.splice(0, itinerary.length, ...saved)
+    return
   }
-  if (!isApiConfigured()) return
   try {
     const elders = await elderApi.list()
     const elder = elders?.items?.[0]
-    if (!elder) return
-    const trip = await elderApi.currentTrip(elder.id)
-    if (trip?.destination && !hasSavedItinerary) {
-      destination.value = trip.destination
-      const destinationItem = itinerary[1] || itinerary[0]
-      destinationItem.title = trip.destination
-      destinationItem.description = `沿平整步道游览${trip.destination}，园区路况平缓，途中可随时休息。`
+    if (!elder) {
+      realScheduleStatus.value = 'empty'
+      return
     }
+    const trip = await elderApi.currentTrip(elder.id)
+    realTrip.value = trip || null
+    realScheduleStatus.value = trip ? 'ready' : 'empty'
   } catch (error) {
-    console.warn('行程单同步失败，使用演示安排', error)
+    realScheduleStatus.value = 'error'
+    realScheduleError.value = error instanceof Error ? error.message : '无法获取真实行程'
+    console.warn('真实行程单同步失败', error)
   }
 })
 
 const showEmergencyInfo = () => {
-  // 这里可以触发弹窗、抽屉或跳转，展示紧急联系人、随身药品、附近医院等信息
-  showDialog({ title: '紧急联系', message: '联系人：张小明（138****2256）\n附近医院：北京同仁医院' });
-};
+  showDialog({ title: contactPresentation.title, message: contactPresentation.message, confirmButtonText: '知道了' })
+}
 </script>
 
 <style scoped>
@@ -283,4 +296,5 @@ const showEmergencyInfo = () => {
 </style>
 <style scoped>
 .edit-button{position:absolute;right:0;top:5px;padding:7px 10px;color:#6657a5;border:0;border-radius:16px;background:#efecfa;font-size:12px}.time-input{width:50px;padding:6px 4px;color:#6657a5;border:1px solid #d8d1ef;border-radius:8px;background:#fff;font-size:12px;text-align:center;outline:none}.edit-fields{display:grid;gap:8px}.edit-fields input,.edit-fields textarea{width:100%;padding:10px;color:#323233;border:1px solid #e3e0e8;border-radius:9px;background:#fafafa;font:inherit;font-size:12px;outline:none;resize:none}.edit-fields input:focus,.edit-fields textarea:focus,.time-input:focus{border-color:#7b6bb5;background:#fff}.edit-fields button{justify-self:end;padding:5px 0;color:#dc666d;border:0;background:transparent;font-size:10px}.edit-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin:4px 0 14px}.edit-actions button{padding:12px;color:#6657a5;border:1px solid #d8d1ef;border-radius:22px;background:#fff;font-size:12px}.edit-actions .save{color:#fff;border-color:#667eea;background:linear-gradient(135deg,#667eea,#764ba2);font-weight:600}
+.real-schedule-state{margin:8px 0 18px;padding:28px 20px;color:#646566;border-radius:14px;background:#fff;text-align:center;box-shadow:0 3px 12px rgba(45,33,82,.07)}.real-schedule-state>.van-icon{color:#7668b5;font-size:34px}.real-schedule-state h2{margin:12px 0 6px;color:#323233;font-size:19px}.real-schedule-state p{font-size:12px}.real-schedule-state.error>.van-icon{color:#d05c64}.real-schedule-state dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:18px 0 12px}.real-schedule-state dl>div{padding:10px;border-radius:9px;background:#f7f6fa}.real-schedule-state dt{color:#969799;font-size:9px}.real-schedule-state dd{margin:4px 0 0;color:#403675;font-size:12px;font-weight:700}.real-schedule-state>small{color:#969799;font-size:10px;line-height:1.5}
 </style>

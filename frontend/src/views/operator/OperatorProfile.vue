@@ -19,17 +19,18 @@
     <section class="card info-card">
       <h2>账号信息</h2>
       <van-cell-group inset>
-        <van-field v-model="user.name" label="姓名" :readonly="!editing" />
-        <van-field v-model="user.phone" label="联系电话" :readonly="!editing" />
-        <van-field v-model="user.organization" label="所属机构" :readonly="!editing" />
+        <van-field v-model="user.name" label="姓名" :readonly="realMode || !editing" />
+        <van-field v-model="user.phone" label="联系电话" :readonly="realMode || !editing" />
+        <van-field v-model="user.organization" label="所属机构" :readonly="realMode || !editing" />
         <van-cell title="账号角色" :value="user.role" />
-        <van-cell title="账号状态"><template #value><span class="ok">正常</span></template></van-cell>
+        <van-cell title="账号状态"><template #value><span class="ok">{{ realMode ? '后端认证会话' : '演示会话' }}</span></template></van-cell>
       </van-cell-group>
     </section>
 
     <section class="card actions-card">
-      <van-button block round type="primary" @click="toggleEdit">{{ editing ? '保存资料' : '编辑资料' }}</van-button>
+      <van-button v-if="!realMode" block round type="primary" @click="toggleEdit">{{ editing ? '保存演示资料' : '编辑演示资料' }}</van-button>
       <button class="logout-button" type="button" @click="logout"><van-icon name="revoke" /> 退出登录</button>
+      <small>{{ realMode ? '真实模式下资料编辑尚未接入。' : '本页为虚构演示资料。' }}</small>
     </section>
 
     <nav class="bottom-nav" aria-label="运营导航">
@@ -52,15 +53,13 @@ import { isApiConfigured, logoutRequest } from '../../services/api'
 const router = useRouter()
 const editing = ref(false)
 const userStore = useUserStore()
-const user = reactive({
-  name: '林晓岚',
-  phone: '188****2608',
-  organization: '夕阳红文旅服务处',
-  role: '平台运营员'
-})
+const realMode = isApiConfigured()
+const user = reactive(realMode
+  ? { name: userStore.userInfo.displayName || userStore.userInfo.username || '运营用户', phone: userStore.userInfo.phone || '未提供', organization: '当前接口未提供', role: '平台运营员' }
+  : { name: '林晓岚', phone: '188****2608', organization: '夕阳红文旅服务处', role: '平台运营员' })
 
 function toggleEdit() {
-  if (editing.value) showSuccessToast('个人资料已保存')
+  if (editing.value) showSuccessToast('演示资料已保存')
   editing.value = !editing.value
 }
 function goModule(view) { router.push({ path: '/operator', query: { view } }) }
@@ -82,6 +81,7 @@ h2 { margin: 0 18px 12px; font-size: 17px; }
 .info-card :deep(.van-cell-group--inset) { margin: 0; } .info-card :deep(.van-cell) { padding: 13px 18px; } .info-card :deep(.van-field__label), .info-card :deep(.van-cell__title) { color: #81798f; } .info-card :deep(.van-field__control), .info-card :deep(.van-cell__value) { color: #2b2442; }
 .ok { color: #2ca66f; font-weight: 700; }
 .actions-card { display: grid; gap: 12px; padding: 16px; }
+.actions-card small{color:#969799;font-size:10px;text-align:center}
 .logout-button{width:100%;padding:12px;color:#e25e66;border:1px solid #f3c7ca;border-radius:22px;background:#fff;font-size:13px}
 .bottom-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; height:62px;display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid #ebedf0;background:rgba(255,255,255,.97); }
 .bottom-nav button { display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;border:0;background:transparent;color:#969799;cursor:pointer}.bottom-nav span{font-size:20px;line-height:1}.bottom-nav small{font-size:10px}.bottom-nav .active{color:#667eea}

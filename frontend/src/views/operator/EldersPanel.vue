@@ -1,14 +1,18 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { showDialog } from 'vant'
-const props = defineProps({ elders: { type: Array, required: true } })
+import { emergencyContactPresentation } from '../../services/modeBoundary'
+const props = defineProps({ elders: { type: Array, required: true }, realMode: { type: Boolean, default: false } })
 const emit = defineEmits(['show-trips'])
 const query = ref('')
 const selected = ref(null)
-const visibleElders = computed(() => props.elders.filter((elder) => [elder.name, elder.phone, elder.family].some((value) => value.includes(query.value.trim()))))
+const contactPresentation = computed(() => emergencyContactPresentation(props.realMode))
+const visibleElders = computed(() => props.elders.filter((elder) => [elder.name, elder.phone, elder.family].some((value) => String(value || '').includes(query.value.trim()))))
 
-function contactFamily(elder) {
-  showDialog({ title: '联系家属', message: `${elder.family} · ${elder.familyPhone}\n演示环境不会发起真实电话。`, confirmButtonText: '知道了' })
+function contactFamily() {
+  const demoMessage = selected.value ? `${selected.value.family} · ${selected.value.familyPhone}\n演示环境不会发起真实电话。` : ''
+  const presentation = emergencyContactPresentation(props.realMode, demoMessage)
+  showDialog({ title: presentation.title, message: presentation.message, confirmButtonText: '知道了' })
 }
 
 function showTrips() {
@@ -19,14 +23,14 @@ function showTrips() {
 
 <template>
   <section class="module-page">
-    <header class="module-header"><div><h1>老人档案</h1><p>共 {{ elders.length }} 位演示老人</p></div></header>
+    <header class="module-header"><div><h1>老人档案</h1><p>共 {{ elders.length }} 位{{ realMode ? '后端返回的授权老人' : '演示老人' }}</p></div></header>
     <div class="search-wrap"><van-search v-model="query" shape="round" placeholder="搜索姓名、电话或家属" /></div>
     <div class="elder-list">
-      <button v-for="elder in visibleElders" :key="elder.id" class="elder-card" type="button" @click="selected = elder"><span class="avatar">{{ elder.name.slice(-1) }}</span><div><strong>{{ elder.name }} <small>{{ elder.gender }} · {{ elder.age }} 岁</small></strong><p><van-icon name="location-o" />{{ elder.lastLocation }}</p><small>{{ elder.updatedAt }} · 家属 {{ elder.family }}</small></div><em :class="{ danger: elder.status === '告警中', attention: elder.status === '需关注' }">{{ elder.status }}</em><van-icon name="arrow" /></button>
+      <button v-for="elder in visibleElders" :key="elder.id" class="elder-card" type="button" @click="selected = elder"><span class="avatar">{{ elder.name.slice(-1) }}</span><div><strong>{{ elder.name }} <small>{{ elder.gender ? `${elder.gender} · ` : '' }}{{ elder.age ?? '年龄未提供' }}{{ elder.age == null ? '' : ' 岁' }}</small></strong><p><van-icon name="location-o" />{{ elder.lastLocation || (realMode ? '位置需查看后端安全视图' : '演示位置未提供') }}</p><small>{{ elder.updatedAt || (realMode ? '档案来自后端' : '演示数据') }} · {{ elder.family }}</small></div><em :class="{ danger: elder.status === '告警中', attention: elder.status === '需关注' }">{{ elder.status }}</em><van-icon name="arrow" /></button>
       <van-empty v-if="visibleElders.length === 0" description="没有匹配的老人档案" />
     </div>
     <van-popup v-model:show="selected" position="bottom" round :style="{ padding: '22px 18px 30px' }">
-      <div v-if="selected" class="detail-sheet"><div class="detail-title"><span>{{ selected.name.slice(-1) }}</span><div><h2>{{ selected.name }}</h2><p>{{ selected.gender }} · {{ selected.age }} 岁 · {{ selected.risk }}</p></div></div><van-cell-group inset><van-cell title="联系电话" :value="selected.phone"/><van-cell title="关联家属" :value="selected.family"/><van-cell title="当前状态" :value="selected.status"/><van-cell title="最近位置" :label="selected.lastLocation" :value="selected.updatedAt"/></van-cell-group><div class="detail-actions"><van-button block round plain type="primary" @click="contactFamily(selected)">联系家属</van-button><van-button block round type="primary" @click="showTrips">查看出游</van-button></div><p class="privacy-note">演示档案已对电话等敏感信息进行脱敏</p></div>
+      <div v-if="selected" class="detail-sheet"><div class="detail-title"><span>{{ selected.name.slice(-1) }}</span><div><h2>{{ selected.name }}</h2><p>{{ selected.gender ? `${selected.gender} · ` : '' }}{{ selected.age ?? '年龄未提供' }}{{ selected.age == null ? '' : ' 岁' }} · {{ selected.risk }}</p></div></div><van-cell-group inset><van-cell title="联系电话" :value="selected.phone || (realMode ? '当前接口未提供' : '演示号码未提供')"/><van-cell title="关联家属" :value="selected.family"/><van-cell title="当前状态" :value="selected.status"/><van-cell title="最近位置" :label="selected.lastLocation || (realMode ? '请查看后端安全视图' : '演示位置未提供')" :value="selected.updatedAt || ''"/></van-cell-group><div class="detail-actions"><van-button block round plain type="primary" @click="contactFamily">{{ contactPresentation.label }}</van-button><van-button block round type="primary" @click="showTrips">查看出游</van-button></div><p class="privacy-note">{{ realMode ? '真实模式 · 当前接口未返回联系人号码，不会发起拨号' : '演示档案已对电话等敏感信息进行脱敏' }}</p></div>
     </van-popup>
   </section>
 </template>
