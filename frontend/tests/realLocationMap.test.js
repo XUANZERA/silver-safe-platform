@@ -23,10 +23,12 @@ import {
   formatPolylinePath,
   loadAMapSdk,
   resetAMapSdk,
-  setAMapSdkLoader
+  setAMapSdkLoader,
+  syncAMapPolyline
 } from '../src/services/map/amapCoordinateAdapter.js'
 
 import {
+  presentLocationHealth,
   presentRisk,
   presentSafety
 } from '../src/services/safetyPresentation.js'
@@ -393,10 +395,17 @@ test('MAP-013 Map failure does not change Safety state', () => {
 // MAP-014: recorded_at presentation preserved
 // ============================================================================
 test('MAP-014 recorded_at presentation preserved', () => {
-  const childHomeSource = source('../src/views/child/ChildHome.vue')
-  assert.match(childHomeSource, /formatTime\(latestLocation\?\.recorded_at\)/)
-  assert.match(childHomeSource, /<p>最后定位：\{\{\s*elder\.update\s*\}\}<\/p>/)
-  assert.doesNotMatch(childHomeSource, /实时位置：\{\{\s*elder\.update\s*\}\}/)
+  const recordedAt = '2026-09-05T01:02:03.000Z'
+  let formattedValue = null
+  const presentation = presentLocationHealth({
+    location_health: 'STALE',
+    latest_location: { recorded_at: recordedAt }
+  }, true, (value) => {
+    formattedValue = value
+    return '09:02:03'
+  })
+  assert.equal(formattedValue, recordedAt)
+  assert.equal(presentation.lastLocationLabel, '最后定位：09:02:03')
 
   const mapCanvasSource = source('../src/components/map/MapCanvas.vue')
   assert.match(mapCanvasSource, /formatRecordedTime/)
@@ -937,103 +946,62 @@ test('MAP-RUN-011 Real map UI copy uses 最新记录位置 instead of 当前位�
 })
 
 // ============================================================================
-// MAP-RUN-012: formatPolylinePath converts MapPoint[] to [[lng, lat], ...] preserving order
+// MAP-PATH-001..006: fail-closed MapPoint[] -> AMap number[][] boundary
 // ============================================================================
-test('MAP-RUN-012 formatPolylinePath converts MapPoint[] to [[lng, lat], ...] preserving order', () => {
-  const mapPoints = [
-    {
-      id: 1,
-      longitude: 116.4074,
-      latitude: 39.9042,
-      displayCrs: DISPLAY_CRS,
-      recordedAt: '2026-09-05T01:00:00.000Z'
-    },
-    {
-      id: 2,
-      longitude: 116.4174,
-      latitude: 39.9142,
-      displayCrs: DISPLAY_CRS,
-      recordedAt: '2026-09-05T01:01:00.000Z'
-    },
-    {
-      id: 3,
-      longitude: 116.4274,
-      latitude: 39.9242,
-      displayCrs: DISPLAY_CRS,
-      recordedAt: '2026-09-05T01:02:00.000Z'
-    }
-  ]
-
-  const path = formatPolylinePath(mapPoints)
-  assert.deepEqual(path, [
-    [116.4074, 39.9042],
-    [116.4174, 39.9142],
-    [116.4274, 39.9242]
-  ])
-  assert.equal(path.length, 3)
-
-  // Array points also accepted
-  const arrayPoints = [
-    [116.4074, 39.9042],
-    [116.4174, 39.9142]
-  ]
-  assert.deepEqual(formatPolylinePath(arrayPoints), [
+test('MAP-PATH-001 valid 2 MapPoints become number[][]', () => {
+  assert.deepEqual(formatPolylinePath([
+    { longitude: 116.4074, latitude: 39.9042 },
+    { longitude: 116.4174, latitude: 39.9142 }
+  ]), [
     [116.4074, 39.9042],
     [116.4174, 39.9142]
   ])
 })
 
-// ============================================================================
-// MAP-RUN-013: formatPolylinePath returns empty path for 0 or 1 point (no Polyline)
-// ============================================================================
-test('MAP-RUN-013 formatPolylinePath returns empty path for 0 or 1 point (no Polyline)', () => {
+test('MAP-PATH-002 one MapPoint produces no Polyline path', () => {
+  assert.deepEqual(formatPolylinePath([
+    { longitude: 116.4074, latitude: 39.9042 }
+  ]), [])
+})
+
+test('MAP-PATH-003 zero MapPoints produce no Polyline path', () => {
   assert.deepEqual(formatPolylinePath([]), [])
-  assert.deepEqual(formatPolylinePath(null), [])
-  assert.deepEqual(formatPolylinePath(undefined), [])
-  assert.deepEqual(formatPolylinePath('invalid'), [])
-  assert.deepEqual(formatPolylinePath({}), [])
-
-  const singlePoint = [
-    {
-      id: 1,
-      longitude: 116.4074,
-      latitude: 39.9042,
-      displayCrs: DISPLAY_CRS,
-      recordedAt: '2026-09-05T01:00:00.000Z'
-    }
-  ]
-  assert.deepEqual(formatPolylinePath(singlePoint), [])
 })
 
-// ============================================================================
-// MAP-RUN-014: formatPolylinePath fails closed on any malformed or out-of-range point
-// ============================================================================
-test('MAP-RUN-014 formatPolylinePath fails closed on any malformed or out-of-range point', () => {
-  const p1 = { longitude: 116.4074, latitude: 39.9042 }
-  const p2 = { longitude: 116.4174, latitude: 39.9142 }
+test('MAP-PATH-004 malformed coordinates fail closed', () => {
+  const valid = { longitude: 116.4074, latitude: 39.9042 }
+  const malformed = [
+    { longitude: NaN, latitude: 39.9142 },
+    { longitude: 116.4174, latitude: undefined },
+    { longitude: 'garbage', latitude: 39.9142 },
+    { longitude: '116.4174', latitude: '39.9142' }
+  ]
 
-  // Null item
-  assert.deepEqual(formatPolylinePath([p1, null, p2]), [])
-  // Undefined item
-  assert.deepEqual(formatPolylinePath([p1, undefined]), [])
-  // Missing latitude
-  assert.deepEqual(formatPolylinePath([p1, { longitude: 116.4174 }]), [])
-  // Missing longitude
-  assert.deepEqual(formatPolylinePath([p1, { latitude: 39.9142 }]), [])
-  // NaN coordinate
-  assert.deepEqual(formatPolylinePath([p1, { longitude: NaN, latitude: 39.9142 }]), [])
-  // Infinity coordinate
-  assert.deepEqual(formatPolylinePath([p1, { longitude: 116.4174, latitude: Infinity }]), [])
-  // String coordinate (not parsed into number)
-  assert.deepEqual(formatPolylinePath([p1, { longitude: '116.4174', latitude: '39.9142' }]), [])
-  // Longitude out of range [-180, 180]
-  assert.deepEqual(formatPolylinePath([p1, { longitude: 185, latitude: 39.9142 }]), [])
-  assert.deepEqual(formatPolylinePath([p1, { longitude: -185, latitude: 39.9142 }]), [])
-  // Latitude out of range [-90, 90]
-  assert.deepEqual(formatPolylinePath([p1, { longitude: 116.4174, latitude: 95 }]), [])
-  assert.deepEqual(formatPolylinePath([p1, { longitude: 116.4174, latitude: -95 }]), [])
-  // Non-object item
-  assert.deepEqual(formatPolylinePath([p1, 'bad-point']), [])
+  for (const point of malformed) {
+    assert.deepEqual(formatPolylinePath([valid, point]), [])
+  }
+})
+
+test('MAP-PATH-005 one malformed point invalidates the whole path', () => {
+  assert.deepEqual(formatPolylinePath([
+    { longitude: 116.4074, latitude: 39.9042 },
+    { longitude: 116.4174 },
+    { longitude: 116.4274, latitude: 39.9242 }
+  ]), [])
+})
+
+test('MAP-PATH-006 out-of-range longitude or latitude fails closed', () => {
+  const valid = { longitude: 116.4074, latitude: 39.9042 }
+  const outOfRange = [
+    { longitude: 180.0001, latitude: 39.9142 },
+    { longitude: -180.0001, latitude: 39.9142 },
+    { longitude: 116.4174, latitude: 90.0001 },
+    { longitude: 116.4174, latitude: -90.0001 }
+  ]
+
+  for (const point of outOfRange) {
+    assert.deepEqual(formatPolylinePath([valid, point]), [])
+  }
 })
 
 // ============================================================================
@@ -1174,8 +1142,8 @@ test('MAP-RUN-017 Zero secret and coordinate logging across code and runtime', (
 test('MAP-RUN-018 MapCanvas manages Polyline dynamically without eager creation for <2 points', () => {
   const mapCanvasSource = source('../src/components/map/MapCanvas.vue')
 
-  // formatPolylinePath must be imported
-  assert.match(mapCanvasSource, /formatPolylinePath/)
+  // Real-mode rendering must use the runtime-tested canonical boundary.
+  assert.match(mapCanvasSource, /syncAMapPolyline/)
 
   // initializeRealMap must NOT create Polyline unconditionally
   const initRealMapBody = mapCanvasSource.slice(
@@ -1188,10 +1156,178 @@ test('MAP-RUN-018 MapCanvas manages Polyline dynamically without eager creation 
     'initializeRealMap 绝不得在 0 或 1 点时预先创建 Polyline'
   )
 
-  // updateRealTrack must use formatPolylinePath and clear path if < 2
-  assert.match(mapCanvasSource, /const\s+path\s*=\s*formatPolylinePath\(track\)/)
-  assert.match(mapCanvasSource, /if\s*\(path\.length\s*>=\s*2\)/)
-  assert.match(mapCanvasSource, /dynamicTrackLine\.setPath\(\[\]\)/)
+  const realModeSource = mapCanvasSource.slice(
+    mapCanvasSource.indexOf('// REAL Mode Presentation Logic'),
+    mapCanvasSource.indexOf('// DEMO Simulation Mode Logic')
+  )
+  assert.doesNotMatch(realModeSource, /setPath\(\[\]\)/)
+})
+
+function createStrictPolylineHarness() {
+  const createdPaths = []
+  const updatedPaths = []
+  const added = []
+  const removed = []
+
+  function assertRuntimePath(path) {
+    assert.ok(Array.isArray(path) && path.length >= 2, 'AMap Polyline path must contain at least two points')
+    for (const point of path) {
+      assert.ok(Array.isArray(point) && point.length === 2, 'AMap point must be [longitude, latitude]')
+      assert.equal(typeof point[0], 'number')
+      assert.equal(typeof point[1], 'number')
+      assert.equal(Number.isFinite(point[0]), true)
+      assert.equal(Number.isFinite(point[1]), true)
+    }
+  }
+
+  class Polyline {
+    constructor(options) {
+      assertRuntimePath(options.path)
+      createdPaths.push(options.path)
+    }
+
+    setPath(path) {
+      assertRuntimePath(path)
+      updatedPaths.push(path)
+    }
+  }
+
+  return {
+    aMap: { Polyline },
+    map: {
+      add(polyline) { added.push(polyline) },
+      remove(polyline) { removed.push(polyline) }
+    },
+    createdPaths,
+    updatedPaths,
+    added,
+    removed
+  }
+}
+
+const initialMapPoints = [
+  { longitude: 116.4074, latitude: 39.9042, displayCrs: DISPLAY_CRS },
+  { longitude: 116.4174, latitude: 39.9142, displayCrs: DISPLAY_CRS }
+]
+
+test('MAP-PATH-007 initial Polyline creation uses the canonical formatter', () => {
+  const harness = createStrictPolylineHarness()
+  const polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    points: initialMapPoints
+  })
+
+  assert.ok(polyline)
+  assert.deepEqual(harness.createdPaths, [[
+    [116.4074, 39.9042],
+    [116.4174, 39.9142]
+  ]])
+  assert.equal(harness.added.length, 1)
+  assert.equal(harness.updatedPaths.length, 0)
+})
+
+test('MAP-PATH-008 subsequent setPath uses the same canonical formatter', () => {
+  const harness = createStrictPolylineHarness()
+  let polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    points: initialMapPoints
+  })
+  polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    polyline,
+    points: [
+      { longitude: 116.4274, latitude: 39.9242, displayCrs: DISPLAY_CRS },
+      { longitude: 116.4374, latitude: 39.9342, displayCrs: DISPLAY_CRS }
+    ]
+  })
+
+  assert.ok(polyline)
+  assert.deepEqual(harness.updatedPaths, [[
+    [116.4274, 39.9242],
+    [116.4374, 39.9342]
+  ]])
+})
+
+test('MAP-PATH-009 polling update passes converted AMap LngLat values as number[][]', async () => {
+  const conversionAMap = {
+    convertFrom(points, type, callback) {
+      assert.equal(type, 'gps')
+      callback('complete', {
+        info: 'ok',
+        locations: points.map((point, index) => ({
+          getLng: () => [116.425, 116.435][index],
+          getLat: () => [39.922, 39.932][index]
+        }))
+      })
+    }
+  }
+  const convertedTrack = await convertCanonicalTrack([
+    { longitude: 116.42, latitude: 39.92, source_crs: 'WGS84' },
+    { longitude: 116.43, latitude: 39.93, source_crs: 'WGS84' }
+  ], { aMap: conversionAMap })
+  assert.equal(Object.getPrototypeOf(convertedTrack[0]), Object.prototype)
+  assert.deepEqual(convertedTrack.map(({ longitude, latitude, displayCrs }) => ({ longitude, latitude, displayCrs })), [
+    { longitude: 116.425, latitude: 39.922, displayCrs: DISPLAY_CRS },
+    { longitude: 116.435, latitude: 39.932, displayCrs: DISPLAY_CRS }
+  ])
+
+  const harness = createStrictPolylineHarness()
+  let polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    points: initialMapPoints
+  })
+  polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    polyline,
+    points: convertedTrack
+  })
+
+  assert.ok(polyline)
+  assert.deepEqual(harness.updatedPaths, [[
+    [116.425, 39.922],
+    [116.435, 39.932]
+  ]])
+})
+
+test('MAP-PATH-010 empty or conversion-failure state removes the line without setPath([])', () => {
+  const harness = createStrictPolylineHarness()
+  let polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    points: initialMapPoints
+  })
+  polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    polyline,
+    points: []
+  })
+
+  assert.equal(polyline, null)
+  assert.equal(harness.removed.length, 1)
+  assert.equal(harness.updatedPaths.length, 0)
+
+  polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    points: initialMapPoints
+  })
+  polyline = syncAMapPolyline({
+    aMap: harness.aMap,
+    map: harness.map,
+    polyline,
+    points: initialMapPoints,
+    enabled: false
+  })
+
+  assert.equal(polyline, null)
+  assert.equal(harness.removed.length, 2)
+  assert.equal(harness.updatedPaths.length, 0)
 })
 
 

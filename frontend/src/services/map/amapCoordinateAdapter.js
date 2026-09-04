@@ -32,36 +32,53 @@ export function formatPolylinePath(points) {
   const path = []
   for (let i = 0; i < points.length; i++) {
     const pt = points[i]
-    if (!pt || typeof pt !== 'object') {
+    if (!pt || typeof pt !== 'object' || Array.isArray(pt)) {
       return []
     }
 
-    let lng = null
-    let lat = null
-
-    if (Number.isFinite(pt.longitude) && Number.isFinite(pt.latitude)) {
-      lng = pt.longitude
-      lat = pt.latitude
-    } else if (
-      Array.isArray(pt) &&
-      pt.length >= 2 &&
-      Number.isFinite(pt[0]) &&
-      Number.isFinite(pt[1])
-    ) {
-      lng = pt[0]
-      lat = pt[1]
-    } else {
+    const { longitude, latitude } = pt
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
       return []
     }
 
-    if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+    if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
       return []
     }
 
-    path.push([lng, lat])
+    path.push([Number(longitude), Number(latitude)])
   }
 
   return path.length >= 2 ? path : []
+}
+
+export function syncAMapPolyline({
+  aMap,
+  map,
+  polyline = null,
+  points,
+  enabled = true,
+  options = {}
+}) {
+  const path = enabled ? formatPolylinePath(points) : []
+
+  if (path.length < 2) {
+    if (polyline) {
+      map.remove(polyline)
+    }
+    return null
+  }
+
+  if (!polyline) {
+    const nextPolyline = new aMap.Polyline({
+      ...options,
+      path
+    })
+    map.add(nextPolyline)
+    return nextPolyline
+  }
+
+  polyline.setPath(path)
+  return polyline
 }
 
 export function loadAMapSdk() {
@@ -149,19 +166,21 @@ export function loadAMapSdk() {
 
 function extractLngLatFromResult(location) {
   if (!location) return null
-  let lng = null
-  let lat = null
+  let rawLng = null
+  let rawLat = null
   if (typeof location.getLng === 'function' && typeof location.getLat === 'function') {
-    lng = location.getLng()
-    lat = location.getLat()
+    rawLng = location.getLng()
+    rawLat = location.getLat()
   } else if (Number.isFinite(location.lng) && Number.isFinite(location.lat)) {
-    lng = location.lng
-    lat = location.lat
+    rawLng = location.lng
+    rawLat = location.lat
   } else if (Array.isArray(location) && location.length >= 2 && Number.isFinite(location[0]) && Number.isFinite(location[1])) {
-    lng = location[0]
-    lat = location[1]
+    rawLng = location[0]
+    rawLat = location[1]
   }
-  if (lng !== null && lat !== null && Number.isFinite(lng) && Number.isFinite(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+  const lng = Number(rawLng)
+  const lat = Number(rawLat)
+  if (rawLng !== null && rawLat !== null && Number.isFinite(lng) && Number.isFinite(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
     return [lng, lat]
   }
   return null
@@ -346,6 +365,7 @@ export function createOperatorSelectionCoordinator({
       onStateChange({
         status: 'NO_LOCATION',
         point: null,
+        safetyView: null,
         generation,
         elderId: null
       })
@@ -355,6 +375,7 @@ export function createOperatorSelectionCoordinator({
     onStateChange({
       status: 'DATA_UNAVAILABLE',
       point: null,
+      safetyView: null,
       generation,
       elderId
     })
@@ -369,6 +390,7 @@ export function createOperatorSelectionCoordinator({
       onStateChange({
         status: 'DATA_UNAVAILABLE',
         point: null,
+        safetyView: null,
         generation,
         elderId,
         error: err
@@ -384,6 +406,7 @@ export function createOperatorSelectionCoordinator({
       onStateChange({
         status: 'NO_LOCATION',
         point: null,
+        safetyView: view,
         generation,
         elderId
       })
@@ -400,6 +423,7 @@ export function createOperatorSelectionCoordinator({
       onStateChange({
         status: 'MAP_CONVERSION_FAILED',
         point: null,
+        safetyView: view,
         generation,
         elderId,
         error: err
@@ -415,6 +439,7 @@ export function createOperatorSelectionCoordinator({
       onStateChange({
         status: 'READY',
         point: mapPoint,
+        safetyView: view,
         generation,
         elderId
       })
@@ -426,6 +451,7 @@ export function createOperatorSelectionCoordinator({
       onStateChange({
         status,
         point: null,
+        safetyView: view,
         generation,
         elderId,
         error: err
@@ -439,6 +465,7 @@ export function createOperatorSelectionCoordinator({
     onStateChange({
       status: 'NO_LOCATION',
       point: null,
+      safetyView: null,
       generation: currentGeneration,
       elderId: null
     })
