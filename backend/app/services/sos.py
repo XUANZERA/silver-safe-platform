@@ -1,6 +1,7 @@
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.core.coordinates import CoordinateReferenceSystem
 from app.core.errors import AppError
 from app.models.alert import Alert
 from app.models.location import Location
@@ -61,7 +62,10 @@ def request_sos(
 
         latest = db.scalar(
             select(Location)
-            .where(Location.trip_id == trip.id)
+            .where(
+                Location.trip_id == trip.id,
+                Location.source_crs == CoordinateReferenceSystem.WGS84.value,
+            )
             .order_by(Location.recorded_at.desc(), Location.id.desc())
             .limit(1)
         )

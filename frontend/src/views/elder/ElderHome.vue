@@ -1,10 +1,14 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 // FIX START: API 失败时向用户展示后端返回的真实错误。
 import { showConfirmDialog, showDialog, showFailToast, showSuccessToast } from 'vant'
 // FIX END: API 失败时向用户展示后端返回的真实错误。
-import { aiApi, alertApi, elderApi, isApiConfigured, tripApi } from '../../services/api'
+import { aiApi, alertApi, elderApi, isApiConfigured, locationApi, tripApi } from '../../services/api'
+import { useUserStore } from '../../stores/user'
+import { createLocationUploadCoordinator } from '../../services/location/LocationUploadCoordinator'
+import { createRealLocationProvider, LOCATION_STATUS } from '../../services/location/RealLocationProvider'
+import { mapRealLocationSampleToPayload } from '../../services/location/locationMapper'
 import { hasValidRealDestination, loadDemoItinerary, presentElderPlan, realDestinationOrPlaceholder, startTripForMode } from '../../services/modeBoundary'
 import { presentElderTripActionHint } from '../../services/modePresentation'
 import { presentSosFailure, presentSosSuccess, runSosSubmission } from '../../services/sosPresentation'
@@ -22,9 +26,12 @@ import {
 import logo from '../../assets/logo.png'
 
 const router = useRouter()
+const userStore = useUserStore()
 const realMode = isApiConfigured()
 const tripStatus = ref(realMode ? '状态获取中' : '出游中')
-const locationStatus = ref(realMode ? '定位状态待同步' : '模拟定位正常')
+const demoLocationStatus = ref('模拟定位正常')
+const locationTechnicalStatus = ref(LOCATION_STATUS.IDLE)
+const locationLifecycleActive = ref(false)
 const showMore = ref(false)
 const showAiPlan = ref(false)
 // FIX START: 单独保存行程 ID，不能把老人 ID 当成行程 ID。
@@ -65,6 +72,74 @@ const tripActionDisabled = computed(() => realMode && (
   (!isTripActive.value && (!isStartableTrip(currentTrip.value) || startingTrip.value))
 ))
 const planPresentation = computed(() => presentElderPlan({ realMode, dataAvailable: tripDataAvailable.value, trip: currentTrip.value }))
+const showRealLocationControl = computed(() => (
+  realMode &&
+  tripDataAvailable.value &&
+  currentTrip.value?.status === 'active'
+))
+const locationStatus = computed(() => {
+  if (!realMode) return demoLocationStatus.value
+  const labels = {
+    [LOCATION_STATUS.IDLE]: '未开启',
+    [LOCATION_STATUS.REQUESTING]: '正在请求定位权限',
+    [LOCATION_STATUS.TRACKING]: '定位守护运行中',
+    [LOCATION_STATUS.DEGRADED]: '定位暂不可用',
+    [LOCATION_STATUS.PERMISSION_DENIED]: '定位权限被拒绝',
+    [LOCATION_STATUS.UNSUPPORTED]: '当前浏览器不支持定位'
+  }
+  return labels[locationTechnicalStatus.value] || '定位暂不可用'
+})
+const locationActionLabel = computed(() => (
+  locationLifecycleActive.value ? '关闭定位守护' : '开启定位守护'
+))
+
+const locationProvider = realMode ? createRealLocationProvider() : null
+const locationCoordinator = realMode
+  ? createLocationUploadCoordinator({
+      upload: (tripId, payload) => locationApi.upload(tripId, payload),
+      mapSample: mapRealLocationSampleToPayload,
+      onStatusChange: (status) => { locationTechnicalStatus.value = status }
+    })
+  : null
+
+function stopRealLocation() {
+  if (!realMode) return
+  locationLifecycleActive.value = false
+  locationProvider?.stop()
+  locationCoordinator?.stop()
+  locationTechnicalStatus.value = LOCATION_STATUS.IDLE
+}
+
+function toggleRealLocation() {
+  if (!showRealLocationControl.value) return
+  if (locationLifecycleActive.value) {
+    stopRealLocation()
+    return
+  }
+
+  locationCoordinator.start(currentTrip.value)
+  locationLifecycleActive.value = true
+  locationTechnicalStatus.value = LOCATION_STATUS.REQUESTING
+  const status = locationProvider.start(
+    (sample) => {
+      if (!locationLifecycleActive.value) return
+      locationTechnicalStatus.value = locationProvider.getStatus()
+      locationCoordinator.handleSample(sample)
+    },
+    () => {
+      const providerStatus = locationProvider.getStatus()
+      if (
+        providerStatus === LOCATION_STATUS.PERMISSION_DENIED ||
+        providerStatus === LOCATION_STATUS.UNSUPPORTED
+      ) {
+        locationLifecycleActive.value = false
+        locationCoordinator.stop()
+      }
+      locationTechnicalStatus.value = providerStatus
+    }
+  )
+  if (status === LOCATION_STATUS.UNSUPPORTED) locationLifecycleActive.value = false
+}
 
 function applySavedItinerary() {
   const items = loadDemoItinerary(realMode, sessionStorage)
@@ -73,6 +148,7 @@ function applySavedItinerary() {
 }
 
 function applyCurrentTrip(trip) {
+  if (realMode && trip?.status !== 'active') stopRealLocation()
   currentTrip.value = trip
   currentTripId.value = trip?.id ?? null
   currentTripBackendStatus.value = trip?.status ?? null
@@ -81,21 +157,19 @@ function applyCurrentTrip(trip) {
 
   if (!trip) {
     tripStatus.value = '暂无进行中的真实行程'
-    locationStatus.value = '当前没有进行中的行程'
   } else {
     tripStatus.value = trip.status === 'active' ? '出游中' : '待出发'
-    locationStatus.value = trip.status === 'active' ? '等待定位上报' : '定位已暂停'
   }
 }
 
 function applyCurrentTripFailure() {
+  stopRealLocation()
   currentTrip.value = null
   currentTripId.value = null
   currentTripBackendStatus.value = null
   elder.destination = ''
   tripDataAvailable.value = false
   tripStatus.value = '行程状态不可用'
-  locationStatus.value = '无法获取最新状态'
 }
 
 async function loadCurrentTrip() {
@@ -126,6 +200,12 @@ onMounted(async () => {
     console.warn('老人端后端数据加载失败', error)
   }
 })
+
+watch(() => userStore.isLoggedIn, (isLoggedIn) => {
+  if (!isLoggedIn) stopRealLocation()
+})
+
+onUnmounted(stopRealLocation)
 
 async function createRealTrip() {
   if (!realMode || creatingTrip.value) return
@@ -190,13 +270,14 @@ async function toggleTrip() {
     try {
       if (realMode) {
         if (!currentTripId.value) throw new Error('没有可结束的行程')
+        stopRealLocation()
         await tripApi.end(currentTripId.value)
         await loadCurrentTrip()
       } else {
         currentTripBackendStatus.value = null
         tripDataAvailable.value = true
         tripStatus.value = '已返程'
-        locationStatus.value = '已停止定位'
+        demoLocationStatus.value = '已停止定位'
       }
       showSuccessToast('出游已结束，辛苦了')
     } catch (error) {
@@ -216,7 +297,7 @@ async function toggleTrip() {
       currentTripBackendStatus.value = 'active'
       tripDataAvailable.value = true
       tripStatus.value = '出游中'
-      locationStatus.value = '模拟定位正常'
+      demoLocationStatus.value = '模拟定位正常'
       showSuccessToast('演示行程已开始，正在显示模拟位置')
     } catch (error) {
       showFailToast(error instanceof Error ? error.message : '开始行程失败')
@@ -309,7 +390,8 @@ function go(path) { router.push(path) }
     <main class="elder-content">
       <section class="status-card"><div class="status-icon"><van-icon :name="isTripActive ? 'location-o' : 'home-o'" /></div><div><small>当前状态</small><strong>{{ tripStatus }}</strong><p v-if="isTripActive && hasUsableDestination">正在前往：{{ elder.destination }}</p><p v-else-if="realMode && !tripDataAvailable">后端行程数据不可用</p><p v-else-if="realMode && currentTrip && !hasUsableDestination">行程目的地无效，请先设置真实目的地</p><p v-else-if="realMode && currentTrip">待出发：{{ elder.destination }}</p><p v-else>{{ realMode ? '当前没有进行中的真实行程' : '欢迎回家，今天辛苦了' }}</p></div><span :class="['status-dot', { off: !isTripActive }]" /></section>
       <!-- FIX START: 显示脚本中随 API 行程状态更新的 locationStatus。 -->
-      <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p>{{ isTripActive ? (realMode ? '等待定位数据上传后供家人查看' : '演示：显示模拟位置') : (realMode ? '开始出游后等待定位数据上传' : '演示：开始后显示模拟定位') }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
+      <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p>{{ realMode ? '定位守护需要保持页面运行。' : (isTripActive ? '演示：显示模拟位置' : '演示：开始后显示模拟定位') }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
+      <button v-if="showRealLocationControl" class="location-action" type="button" @click="toggleRealLocation"><van-icon :name="locationLifecycleActive ? 'pause-circle-o' : 'aim'" />{{ locationActionLabel }}</button>
       <!-- FIX END: 显示真实的 locationStatus。 -->
       <button class="plan-card" type="button" @click="go('/schedule')"><div class="plan-title"><div><small>今日出游计划</small><strong>{{ planPresentation.title }}</strong></div><van-icon name="arrow" /></div><template v-if="planPresentation.kind === 'demo'"><div class="plan-row"><span><b>08:30</b><small>专车到家</small></span><i></i><span><b>09:00</b><small>到达公园</small></span><i></i><span><b>15:30</b><small>专车回家</small></span></div><p><van-icon name="info-o" /> 演示：沿平整步道游览，途中有休息区</p></template><p v-else-if="planPresentation.kind === 'ready'"><van-icon name="info-o" /> 目的地来自后端；当前接口未提供详细时间安排</p><p v-else><van-icon name="info-o" /> {{ planPresentation.title }}</p></button>
       <section v-if="isCreateUnknown" class="create-state-card"><strong>行程请求结果暂时无法确认</strong><van-button block round type="primary" color="#667eea" :loading="refreshingUnknownTrip" :disabled="refreshingUnknownTrip" @click="refreshUnknownTripState">刷新行程状态</van-button></section>
@@ -362,4 +444,5 @@ function go(path) { router.push(path) }
 .ai-input-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }.ai-input-row :deep(.van-cell) { flex: 1; padding: 8px 10px; border-radius: 20px; background: #f5f5f5; }.ai-input-row .van-button { width: 58px; height: 36px; padding: 0; font-size: 11px; }
 .quick-actions button:disabled{cursor:wait;opacity:.65}.sos-result{margin:10px 2px 0;padding:9px 11px;color:#6657a5;border-radius:9px;background:#f0edfb;font-size:10px;line-height:1.5}
 .create-trip-entry{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;margin-top:12px;padding:13px;color:#6657a5;border:1px solid #ded7f3;border-radius:12px;background:#fff;font-size:15px;font-weight:700}.create-state-card{display:grid;gap:12px;margin-top:12px;padding:15px;color:#6657a5;border:1px solid #ded7f3;border-radius:12px;background:#fff}.create-state-card strong{text-align:center;font-size:14px}.create-trip-popup{display:grid;gap:16px;color:#323233}.create-trip-popup>strong{font-size:19px}.create-trip-popup :deep(.van-cell){padding:10px 0}.create-trip-buttons{display:grid;grid-template-columns:1fr 2fr;gap:10px}.create-unknown-popup{padding-top:4px;text-align:center}
+.location-action{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;margin-top:10px;padding:12px;color:#6657a5;border:1px solid #ded7f3;border-radius:12px;background:#fff;font-size:14px;font-weight:700}
 </style>

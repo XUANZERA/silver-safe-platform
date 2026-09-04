@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from app.core.field_encryption import encrypt_health_info
 from app.core.security import hash_password
 from app.models.elder import Elder, ElderFamilyBinding
-from app.models.geofence import Geofence
 from app.models.user import User
 
 DEMO_PASSWORD = "demo123"
@@ -74,16 +73,4 @@ def seed_demo_data(session: Session) -> None:
     if binding is None:
         session.add(ElderFamilyBinding(elder_id=elder.id, family_user_id=family_user.id))
 
-    geofence = session.scalar(select(Geofence).where(Geofence.elder_id == elder.id))
-    if geofence is None:
-        session.add(
-            Geofence(
-                elder_id=elder.id,
-                # Keep demo data aligned with A's GCJ-02 map simulator.
-                center_latitude=23.1291,
-                center_longitude=113.2644,
-                radius_meters=300,
-                enabled=True,
-            )
-        )
     session.commit()

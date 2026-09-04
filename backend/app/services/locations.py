@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.coordinates import CoordinateReferenceSystem, normalize_location_coordinates
 from app.core.errors import AppError
 from app.models.alert import Alert
 from app.models.location import Location
@@ -20,6 +21,7 @@ def _same_location(existing: Location, payload: LocationCreateRequest) -> bool:
         and existing.speed_mps == payload.speed_mps
         and existing.accuracy_meters == payload.accuracy_meters
         and existing.source == payload.source.value
+        and existing.source_crs == payload.source_crs.value
         and existing.recorded_at == payload.recorded_at.astimezone(UTC)
     )
 
@@ -89,6 +91,12 @@ def record_location(
             "SIMULATION_NOT_ALLOWED",
         )
 
+    canonical = normalize_location_coordinates(
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        source_crs=payload.source_crs,
+    )
+
     recorded_at = payload.recorded_at.astimezone(UTC)
     now = datetime.now(UTC)
     allowed_skew = timedelta(seconds=settings.location_clock_skew_seconds)
@@ -118,11 +126,12 @@ def record_location(
     location = Location(
         trip=trip,
         client_location_id=payload.client_location_id,
-        latitude=payload.latitude,
-        longitude=payload.longitude,
+        latitude=canonical.latitude,
+        longitude=canonical.longitude,
         speed_mps=payload.speed_mps,
         accuracy_meters=payload.accuracy_meters,
         source=payload.source.value,
+        source_crs=canonical.crs.value,
         recorded_at=recorded_at,
     )
     db.add(location)
@@ -154,7 +163,10 @@ def record_location(
 def get_latest_trip_location(db: Session, trip_id: int) -> Location | None:
     return db.scalar(
         select(Location)
-        .where(Location.trip_id == trip_id)
+        .where(
+            Location.trip_id == trip_id,
+            Location.source_crs == CoordinateReferenceSystem.WGS84.value,
+        )
         .order_by(Location.recorded_at.desc(), Location.id.desc())
         .limit(1)
     )
@@ -168,7 +180,10 @@ def list_trip_locations(
     from_time: datetime | None,
     to_time: datetime | None,
 ) -> tuple[list[Location], bool]:
-    filters = [Location.trip_id == trip_id]
+    filters = [
+        Location.trip_id == trip_id,
+        Location.source_crs == CoordinateReferenceSystem.WGS84.value,
+    ]
     for name, value in (("from_time", from_time), ("to_time", to_time)):
         if value is not None and value.tzinfo is None:
             raise AppError(400, f"{name} 必须包含时区", "TIMEZONE_REQUIRED")

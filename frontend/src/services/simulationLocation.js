@@ -4,6 +4,7 @@ export function createSimulationLocationPayload({
   runId,
   sequence,
   point,
+  sourceCrs,
   recordedAt = new Date(),
 }) {
   if (!Number.isInteger(tripId) || tripId <= 0) {
@@ -27,6 +28,9 @@ export function createSimulationLocationPayload({
   if (Number.isNaN(timestamp.getTime())) {
     throw new TypeError("recordedAt 格式不合法")
   }
+  if (sourceCrs !== "WGS84") {
+    throw new TypeError("Phase 1 模拟定位必须显式声明 sourceCrs=WGS84")
+  }
 
   return {
     client_location_id: `sim:${tripId}:${runId}:${sequence}`,
@@ -35,6 +39,7 @@ export function createSimulationLocationPayload({
     speed_mps: null,
     accuracy_meters: 8,
     source: "simulation",
+    source_crs: sourceCrs,
     recorded_at: timestamp.toISOString(),
   }
 }

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.coordinates import CoordinateReferenceSystem
 from app.models.alert import Alert
 from app.models.geofence import Geofence
 from app.models.location import Location
@@ -73,6 +74,7 @@ def evaluate_geofence_risk(
         select(Geofence).where(
             Geofence.elder_id == elder_id,
             Geofence.enabled.is_(True),
+            Geofence.crs == CoordinateReferenceSystem.WGS84.value,
         )
     )
     if geofence is None:
@@ -83,6 +85,7 @@ def evaluate_geofence_risk(
             select(Location)
             .where(
                 Location.trip_id == trip_id,
+                Location.source_crs == CoordinateReferenceSystem.WGS84.value,
                 Location.accuracy_meters.is_not(None),
                 Location.accuracy_meters <= settings.geofence_max_accuracy_meters,
             )
@@ -158,5 +161,7 @@ def _detect_geofence_exit(db: Session, location: Location) -> Alert | None:
 
 
 def evaluate_location_risk(db: Session, location: Location) -> list[Alert]:
+    if location.source_crs != CoordinateReferenceSystem.WGS84.value:
+        raise ValueError("Risk evaluation requires a canonical WGS84 Location")
     event = _detect_geofence_exit(db, location)
     return [event] if event is not None else []

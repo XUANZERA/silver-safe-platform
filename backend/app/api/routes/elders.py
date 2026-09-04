@@ -3,6 +3,7 @@ from sqlalchemy import select
 
 from app.api.dependencies import CurrentUser, DbSession
 from app.core.config import get_settings
+from app.core.coordinates import CoordinateReferenceSystem
 from app.models.geofence import Geofence
 from app.schemas.common import ApiResponse
 from app.schemas.elder import ElderListResponse, ElderResponse, GeofenceResponse
@@ -90,7 +91,12 @@ def get_geofence(
     current_user: CurrentUser,
 ) -> ApiResponse[GeofenceResponse]:
     ensure_elder_access(db, current_user, elder_id)
-    geofence = db.scalar(select(Geofence).where(Geofence.elder_id == elder_id))
+    geofence = db.scalar(
+        select(Geofence).where(
+            Geofence.elder_id == elder_id,
+            Geofence.crs == CoordinateReferenceSystem.WGS84.value,
+        )
+    )
     if geofence is None:
         return ApiResponse(data=None, message="暂未配置安全围栏")
     return ApiResponse(data=GeofenceResponse.model_validate(geofence))
