@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 
+from app.core.coordinates import CoordinateReferenceSystem
+
 
 class ElderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -24,3 +26,4 @@ class GeofenceResponse(BaseModel):
     center_longitude: float
     radius_meters: int
     enabled: bool
+    crs: CoordinateReferenceSystem | None = None

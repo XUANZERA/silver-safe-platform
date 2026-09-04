@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.coordinates import CoordinateReferenceSystem
 from app.models.alert import Alert
 from app.models.location import Location
 from app.schemas.alert import AlertResponse
@@ -43,7 +44,10 @@ def get_safety_view(db: Session, *, elder_id: int) -> SafetyViewResponse:
     if trip is not None:
         latest_location = db.scalar(
             select(Location)
-            .where(Location.trip_id == trip.id)
+            .where(
+                Location.trip_id == trip.id,
+                Location.source_crs == CoordinateReferenceSystem.WGS84.value,
+            )
             .order_by(Location.recorded_at.desc(), Location.id.desc())
             .limit(1)
         )

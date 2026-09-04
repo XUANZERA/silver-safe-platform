@@ -24,6 +24,7 @@ def client() -> Iterator[TestClient]:
 def clean_business_data(client: TestClient) -> Iterator[None]:
     from app.db.session import SessionLocal
     from app.models.alert import Alert, AlertLog
+    from app.models.geofence import Geofence
     from app.models.location import Location
     from app.models.security import AuditLog, AuthSession
     from app.models.trip import Trip
@@ -36,6 +37,7 @@ def clean_business_data(client: TestClient) -> Iterator[None]:
         session.execute(delete(Alert))
         session.execute(delete(Location))
         session.execute(delete(Trip))
+        session.execute(delete(Geofence))
         session.commit()
     yield
     client.cookies.clear()

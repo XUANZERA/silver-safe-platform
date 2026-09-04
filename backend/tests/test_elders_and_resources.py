@@ -3,6 +3,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.elder import Elder
+from app.models.geofence import Geofence
 from app.models.security import AuditLog
 from tests.test_auth import API, login
 
@@ -32,10 +33,32 @@ def test_role_scoped_elder_queries_and_geofence(client: TestClient) -> None:
     assert detail.status_code == 200
     assert detail.json()["data"]["health_info"] == "轻度高血压"
     assert geofence.status_code == 200
-    assert geofence.json()["data"]["radius_meters"] == 300
-    assert geofence.json()["data"]["center_latitude"] == 23.1291
-    assert geofence.json()["data"]["center_longitude"] == 113.2644
-    assert "id" not in geofence.json()["data"]
+    assert geofence.json()["data"] is None
+    assert geofence.json()["message"] == "暂未配置安全围栏"
+
+    with SessionLocal() as session:
+        session.add(
+            Geofence(
+                elder_id=elder_id,
+                center_latitude=23.1300,
+                center_longitude=113.2600,
+                radius_meters=300,
+                enabled=True,
+                crs="WGS84",
+            )
+        )
+        session.commit()
+
+    configured = client.get(
+        f"{API}/elders/{elder_id}/geofence",
+        headers=headers(client, "family01"),
+    )
+    assert configured.status_code == 200
+    assert configured.json()["data"]["radius_meters"] == 300
+    assert configured.json()["data"]["center_latitude"] == 23.1300
+    assert configured.json()["data"]["center_longitude"] == 113.2600
+    assert configured.json()["data"]["crs"] == "WGS84"
+    assert "id" not in configured.json()["data"]
 
 
 def test_health_info_is_encrypted_redacted_and_audited(client: TestClient) -> None:

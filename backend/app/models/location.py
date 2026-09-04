@@ -31,6 +31,10 @@ class Location(Base):
             "source IN ('simulation', 'h5')",
             name="ck_locations_source",
         ),
+        CheckConstraint(
+            "source_crs IS NULL OR source_crs = 'WGS84'",
+            name="ck_locations_source_crs",
+        ),
         UniqueConstraint(
             "trip_id",
             "client_location_id",
@@ -48,6 +52,7 @@ class Location(Base):
     speed_mps: Mapped[float | None] = mapped_column(Float, nullable=True)
     accuracy_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(20), default="h5")
+    source_crs: Mapped[str | None] = mapped_column(String(20), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(UTCDateTime())
     received_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now)
 

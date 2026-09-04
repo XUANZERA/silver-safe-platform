@@ -3,6 +3,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.coordinates import CoordinateReferenceSystem
+
 
 class LocationSource(StrEnum):
     SIMULATION = "simulation"
@@ -20,6 +22,7 @@ class LocationCreateRequest(BaseModel):
     speed_mps: float | None = Field(default=None, ge=0, le=100)
     accuracy_meters: float | None = Field(default=None, ge=0, le=10000)
     source: LocationSource = LocationSource.H5
+    source_crs: CoordinateReferenceSystem
     recorded_at: datetime
 
 
@@ -34,6 +37,7 @@ class LocationResponse(BaseModel):
     speed_mps: float | None
     accuracy_meters: float | None
     source: LocationSource
+    source_crs: CoordinateReferenceSystem
     recorded_at: datetime
     received_at: datetime
 
@@ -45,6 +49,7 @@ class TrackPointResponse(BaseModel):
     latitude: float
     longitude: float
     accuracy_meters: float | None
+    source_crs: CoordinateReferenceSystem
     recorded_at: datetime
 
 

@@ -63,6 +63,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
         if field in {"latitude", "longitude"}:
             return _error_response(400, "经纬度不合法", "INVALID_COORDINATES")
+        if field == "source_crs":
+            return _error_response(
+                422,
+                "Phase 1 仅支持必填的 source_crs=WGS84",
+                "UNSUPPORTED_SOURCE_CRS",
+            )
         if location[:2] == ("query", "limit"):
             return _error_response(400, "limit 必须在 1 到 500 之间", "INVALID_LIMIT")
         return _error_response(422, message, "VALIDATION_ERROR")

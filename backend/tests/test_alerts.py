@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from threading import Barrier
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from sqlalchemy import inspect, select, text
 from app.core.security import hash_password
 from app.db.session import SessionLocal, engine
 from app.models.alert import AlertLog
+from app.models.location import Location
 from app.models.security import AuditLog
 from app.models.user import User
 from tests.test_auth import API, login
@@ -375,3 +377,100 @@ def test_openapi_contains_only_expected_alert_operations(client: TestClient) -> 
         for method in path
     )
     assert operations == 25
+
+
+def test_sos_does_not_consume_legacy_null_crs_location(client: TestClient) -> None:
+    trip_id, _ = create_active_trip(client)
+    with SessionLocal() as session:
+        session.add(
+            Location(
+                trip_id=trip_id,
+                client_location_id="legacy-null-crs",
+                latitude=23.1291,
+                longitude=113.2644,
+                source="simulation",
+                source_crs=None,
+                recorded_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    response = create_sos(client, trip_id)
+    assert response.status_code == 201
+    alert_data = response.json()["data"]
+    assert alert_data["latitude"] is None
+    assert alert_data["longitude"] is None
+
+
+def test_sos_uses_canonical_wgs84_location_when_legacy_location_is_newer(
+    client: TestClient,
+) -> None:
+    trip_id, _ = create_active_trip(client)
+    now = datetime.now(UTC)
+    with SessionLocal() as session:
+        session.add(
+            Location(
+                trip_id=trip_id,
+                client_location_id="wgs84-older",
+                latitude=39.9042,
+                longitude=116.4074,
+                source="h5",
+                source_crs="WGS84",
+                recorded_at=now - timedelta(minutes=5),
+            )
+        )
+        session.add(
+            Location(
+                trip_id=trip_id,
+                client_location_id="legacy-newer",
+                latitude=23.1291,
+                longitude=113.2644,
+                source="simulation",
+                source_crs=None,
+                recorded_at=now,
+            )
+        )
+        session.commit()
+
+    response = create_sos(client, trip_id)
+    assert response.status_code == 201
+    alert_data = response.json()["data"]
+    assert alert_data["latitude"] == 39.9042
+    assert alert_data["longitude"] == 116.4074
+
+
+def test_sos_uses_latest_canonical_wgs84_location_when_canonical_is_newer(
+    client: TestClient,
+) -> None:
+    trip_id, _ = create_active_trip(client)
+    now = datetime.now(UTC)
+    with SessionLocal() as session:
+        session.add(
+            Location(
+                trip_id=trip_id,
+                client_location_id="legacy-older",
+                latitude=23.1291,
+                longitude=113.2644,
+                source="simulation",
+                source_crs=None,
+                recorded_at=now - timedelta(minutes=5),
+            )
+        )
+        session.add(
+            Location(
+                trip_id=trip_id,
+                client_location_id="wgs84-newer",
+                latitude=39.9042,
+                longitude=116.4074,
+                source="h5",
+                source_crs="WGS84",
+                recorded_at=now,
+            )
+        )
+        session.commit()
+
+    response = create_sos(client, trip_id)
+    assert response.status_code == 201
+    alert_data = response.json()["data"]
+    assert alert_data["latitude"] == 39.9042
+    assert alert_data["longitude"] == 116.4074

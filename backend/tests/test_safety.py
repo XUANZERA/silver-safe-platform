@@ -74,6 +74,7 @@ def business_state_snapshot() -> dict[str, list[tuple[object, ...]]]:
                     item.speed_mps,
                     item.accuracy_meters,
                     item.source,
+                    item.source_crs,
                     item.recorded_at,
                     item.received_at,
                 )
@@ -121,7 +122,7 @@ def test_tc_safety_002_active_trip_without_location(client: TestClient) -> None:
 
 
 def test_tc_safety_003_active_trip_with_fresh_valid_location(client: TestClient) -> None:
-    elder_headers, trip_id, elder_id = start_trip(client)
+    elder_headers, trip_id, elder_id = start_trip(client, with_geofence=True)
     upload(
         client,
         elder_headers,
@@ -138,10 +139,13 @@ def test_tc_safety_003_active_trip_with_fresh_valid_location(client: TestClient)
     assert data["location_health"] == "FRESH"
     assert data["risk_status"] == "SAFE"
     assert data["latest_location"]["client_location_id"] == "inside-fresh"
+    assert data["latest_location"]["source_crs"] == "WGS84"
+    assert data["latest_location"]["latitude"] == 23.1291
+    assert data["latest_location"]["longitude"] == 113.2644
 
 
 def test_tc_safety_004_backend_risk_pending(client: TestClient) -> None:
-    elder_headers, trip_id, elder_id = start_trip(client)
+    elder_headers, trip_id, elder_id = start_trip(client, with_geofence=True)
     upload(
         client,
         elder_headers,
@@ -161,7 +165,7 @@ def test_tc_safety_004_backend_risk_pending(client: TestClient) -> None:
 
 
 def test_tc_safety_005_backend_risk_alert(client: TestClient) -> None:
-    elder_headers, trip_id, elder_id = start_trip(client)
+    elder_headers, trip_id, elder_id = start_trip(client, with_geofence=True)
     start = datetime.now(UTC)
     for index in range(3):
         upload(
@@ -184,7 +188,7 @@ def test_tc_safety_005_backend_risk_alert(client: TestClient) -> None:
 
 
 def test_tc_safety_006_safe_risk_with_processing_alert(client: TestClient) -> None:
-    elder_headers, trip_id, elder_id = start_trip(client)
+    elder_headers, trip_id, elder_id = start_trip(client, with_geofence=True)
     start = datetime.now(UTC)
     alert_id = None
     for index in range(3):
