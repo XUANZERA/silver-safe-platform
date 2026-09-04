@@ -40,15 +40,15 @@ test('unknown or stale location cannot be displayed as safe', () => {
     risk_status: null
   })
 
-  assert.equal(stale.location, '定位数据已过期')
+  assert.equal(stale.location, '定位较久未更新')
   assert.equal(stale.risk, '风险状态无法判定')
   assert.equal(stale.tone, 'neutral')
 })
 
-test('PRESENTATION-002 FRESHNESS_TBD cannot produce a success tone', () => {
+test('PRESENTATION-002 unknown location health cannot produce a success tone', () => {
   const view = {
     trip_status: 'active',
-    location_health: 'FRESHNESS_TBD',
+    location_health: 'UNRECOGNIZED',
     risk_status: 'SAFE'
   }
 
@@ -56,7 +56,7 @@ test('PRESENTATION-002 FRESHNESS_TBD cannot produce a success tone', () => {
     label: '风险状态无法判定',
     tone: 'neutral'
   })
-  assert.equal(presentSafety(view).location, '定位新鲜度待确认')
+  assert.equal(presentSafety(view).location, '定位状态未知')
 })
 
 test('PRESENTATION-003 unavailable risk and alert use neutral tones', () => {

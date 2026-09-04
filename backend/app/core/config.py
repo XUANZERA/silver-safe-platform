@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     geofence_trigger_count: int = Field(default=3, ge=2, le=10)
     geofence_max_accuracy_meters: float = Field(default=100, gt=0, le=1000)
     geofence_alert_cooldown_minutes: int = Field(default=10, ge=1, le=1440)
-    location_stale_after_seconds: int | None = Field(default=None, ge=1, le=86400)
+    location_stale_after_seconds: int = Field(default=60, gt=0, le=86400)
     location_read_audit_window_seconds: int = Field(default=60, ge=10, le=3600)
     sos_duplicate_seconds: int = Field(default=30, ge=5, le=300)
     sos_rate_limit_window_seconds: int = Field(default=60, ge=10, le=3600)

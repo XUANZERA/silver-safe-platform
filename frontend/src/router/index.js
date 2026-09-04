@@ -12,12 +12,19 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (to.meta?.title) {
     document.title = to.meta.title
   }
 
   const userStore = useUserStore()
+  if (isApiConfigured() && userStore.isLoggedIn && !userStore.authReady) {
+    try {
+      await userStore.ensureAuthReady()
+    } catch {
+      if (to.name !== 'Login') return '/login'
+    }
+  }
   if (to.meta?.demoOnly) {
     const redirect = demoOnlyRedirect(isApiConfigured(), userStore.isLoggedIn ? userStore.userInfo : null)
     if (redirect) return redirect

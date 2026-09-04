@@ -15,7 +15,12 @@ import {
 import { loadDemoItinerary, realDestinationOrPlaceholder } from '../../services/modeBoundary'
 import { nextFamilyAttentionState } from '../../services/modePresentation'
 import { createPollingController, normalizePollingInterval } from '../../services/polling'
-import { presentAlertWorkflow, presentRisk, presentSafety } from '../../services/safetyPresentation'
+import {
+  presentAlertWorkflow,
+  presentLocationHealth,
+  presentRisk,
+  presentSafety
+} from '../../services/safetyPresentation'
 
 const router = useRouter()
 const realMode = isApiConfigured()
@@ -42,6 +47,10 @@ const elder = reactive({
 const safetyPresentation = computed(() => realMode
   ? presentSafety(safetyView.value, stateAvailable.value)
   : { trip: '出游中', location: '演示定位', risk: '演示围栏内', tone: 'demo' })
+const locationPresentation = computed(() => presentLocationHealth(
+  safetyView.value,
+  stateAvailable.value
+))
 const latestOpenAlert = computed(() => {
   const fromSafety = safetyView.value?.latest_open_alert
   if (fromSafety) return fromSafety
@@ -248,17 +257,17 @@ function toggleDemoAttention() {
         />
         <div v-else class="map-placeholder"><span class="fence"></span><span class="pin"><van-icon name="location" /></span><em>{{ elder.location }}</em></div>
         <div class="location-info">
-          <div><strong>{{ safetyPresentation.trip }}</strong><p>最后定位：{{ elder.update }}</p></div>
+          <div><strong>{{ realMode ? locationPresentation.markerLabel : safetyPresentation.trip }}</strong><p>{{ realMode ? locationPresentation.lastLocationLabel : `最后定位：${elder.update}` }}</p></div>
           <button type="button" :disabled="stateLoading" @click="refresh"><van-icon name="replay" />{{ stateLoading ? '同步中' : '刷新状态' }}</button>
         </div>
       </section>
       <section v-if="realMode" class="status-grid">
         <div><small>Trip status</small><strong>{{ safetyPresentation.trip }}</strong></div>
-        <div><small>Location health</small><strong>{{ safetyPresentation.location }}</strong></div>
+        <div :class="locationPresentation.tone"><small>Location health</small><strong>{{ safetyPresentation.location }}</strong></div>
         <div><small>Risk status</small><strong>{{ safetyPresentation.risk }}</strong></div>
         <div><small>Open alerts</small><strong>{{ stateAvailable ? safetyView?.open_alert_count : '不可用' }}</strong></div>
       </section>
-      <section v-if="realMode" class="notice-card risk-card" :class="riskPresentation.tone">
+      <section v-if="realMode" class="notice-card risk-card" :class="locationPresentation.isStale ? 'warning' : riskPresentation.tone">
         <van-icon :name="riskPresentation.tone === 'danger' ? 'warning-o' : 'shield-o'" />
         <div>
           <small>当前风险</small>
@@ -308,4 +317,5 @@ function toggleDemoAttention() {
 </style>
 <style scoped>
 .online.unavailable{color:#b36b45}.online.unavailable i{background:#d18a60}.location-info button:disabled{cursor:wait;opacity:.6}.status-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.status-grid div{padding:11px;border-radius:10px;background:#fff}.status-grid small,.status-grid strong{display:block}.status-grid small{color:#969799;font-size:9px}.status-grid strong{margin-top:4px;font-size:11px}.notice-card small,.event-card small{display:block;margin-bottom:3px;color:inherit;font-size:9px}.notice-card.neutral{color:#7d6f67;background:#f1efed}.notice-card.neutral p{color:#7d6f67}.notice-card.warning{color:#a26725;background:#fff7e8}.notice-card.warning p{color:#966b37}.notice-card.danger{color:#c64048;background:#fff0f1}.notice-card.danger p{color:#a4555a}.notice-card.demo{color:#6657a5;background:#f1effa}.notice-card.demo p{color:#756c91}.event-card{display:flex;gap:10px;align-items:flex-start;margin-top:10px;padding:14px;color:#646566;border-radius:10px;background:#fff}.event-card>.van-icon{font-size:20px}.event-card strong{font-size:13px}.event-card p{margin-top:3px;font-size:10px}.event-card.warning{color:#a26725;background:#fff7e8}.event-card.processing{color:#5d5a9d;background:#f1effa}.event-card.success{color:#3d9a6a;background:#eaf8f1}.event-card.neutral{color:#7d6f67;background:#f1efed}.attention-unavailable{margin-top:13px;padding:12px;color:#7d6f67;border:1px solid #dedad7;border-radius:22px;background:#f5f3f1;font-size:12px;text-align:center}
+.status-grid div.warning{color:#a26725;background:#fff7e8}
 </style>

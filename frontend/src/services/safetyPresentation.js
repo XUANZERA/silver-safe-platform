@@ -5,12 +5,11 @@ const TRIP_LABELS = {
   cancelled: '已取消'
 }
 
-const LOCATION_LABELS = {
-  NO_DATA: '暂无定位数据',
-  FRESH: '定位数据新鲜',
-  STALE: '定位数据已过期',
-  INACCURATE: '定位精度不足',
-  FRESHNESS_TBD: '定位新鲜度待确认'
+const LOCATION_PRESENTATIONS = {
+  NO_DATA: { label: '暂无定位数据', tone: 'neutral' },
+  FRESH: { label: '定位正常', tone: 'success' },
+  STALE: { label: '定位较久未更新', tone: 'warning' },
+  INACCURATE: { label: '定位精度不足', tone: 'warning' }
 }
 
 const RISK_LABELS = {
@@ -77,19 +76,65 @@ export function presentAlertWorkflow(alert, available = true) {
   }
 }
 
+function formatRecordedAt(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+}
+
+export function presentLocationHealth(view, available = true, formatTime = formatRecordedAt) {
+  if (!available || !view) {
+    return {
+      label: '数据不可用',
+      tone: 'neutral',
+      markerLabel: '暂无定位数据',
+      lastLocationLabel: '最后定位：无法获取最新状态',
+      recordedAtText: '无法获取最新状态',
+      recordedAt: null,
+      showMarker: false,
+      isStale: false
+    }
+  }
+
+  const state = LOCATION_PRESENTATIONS[view.location_health] || {
+    label: '定位状态未知',
+    tone: 'neutral'
+  }
+  const recordedAt = view.latest_location?.recorded_at || null
+  const recordedAtText = recordedAt ? formatTime(recordedAt) : '暂无记录'
+  const showMarker = Boolean(view.latest_location)
+  return {
+    ...state,
+    markerLabel: showMarker ? '最新记录位置' : '暂无定位数据',
+    lastLocationLabel: `最后定位：${recordedAtText}`,
+    recordedAtText,
+    recordedAt,
+    showMarker,
+    isStale: view.location_health === 'STALE'
+  }
+}
+
 export function presentSafety(view, available = true) {
   const risk = presentRisk(view, available)
+  const location = presentLocationHealth(view, available)
   if (!available || !view) {
     return {
       trip: '数据不可用',
       location: '数据不可用',
+      locationTone: 'neutral',
       risk: risk.label,
       tone: risk.tone
     }
   }
   return {
     trip: view.trip_status ? (TRIP_LABELS[view.trip_status] || view.trip_status) : '无进行中行程',
-    location: LOCATION_LABELS[view.location_health] || '定位状态未知',
+    location: location.label,
+    locationTone: location.tone,
     risk: risk.label,
     tone: risk.tone
   }

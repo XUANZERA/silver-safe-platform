@@ -19,7 +19,7 @@ from tests.test_locations_and_risk import headers, start_trip, upload
 
 
 @contextmanager
-def stale_threshold(seconds: int | None) -> Iterator[None]:
+def stale_threshold(seconds: int) -> Iterator[None]:
     settings = get_settings()
     original = settings.location_stale_after_seconds
     try:
@@ -282,9 +282,7 @@ def test_tc_safety_007_and_008_family_scope_and_operator_access(
             session.commit()
 
 
-def test_location_health_is_conservative_without_approved_stale_threshold(
-    client: TestClient,
-) -> None:
+def test_location_health_uses_default_stale_threshold(client: TestClient) -> None:
     elder_headers, trip_id, elder_id = start_trip(client)
     upload(
         client,
@@ -296,11 +294,9 @@ def test_location_health_is_conservative_without_approved_stale_threshold(
         recorded_at=datetime.now(UTC),
     )
 
-    with stale_threshold(None):
-        data = safety(client, elder_id)
+    data = safety(client, elder_id)
 
-    assert data["location_health"] == "FRESHNESS_TBD"
-    assert data["risk_status"] is None
+    assert data["location_health"] == "FRESH"
 
 
 def test_location_health_distinguishes_stale_and_inaccurate(client: TestClient) -> None:

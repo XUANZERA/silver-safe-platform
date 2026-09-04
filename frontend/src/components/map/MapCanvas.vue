@@ -103,8 +103,8 @@ import elderIcon from "./elder.png"
 import { isApiConfigured } from "../../services/api.js"
 import {
   createMapLifecycleManager,
-  formatPolylinePath,
   loadAMapSdk,
+  syncAMapPolyline,
 } from "../../services/map/amapCoordinateAdapter.js"
 
 const props = defineProps({
@@ -280,8 +280,7 @@ function updateRealMarker(point) {
   })
 
   // Center view on the latest position
-  const validPath = formatPolylinePath(props.trackPoints)
-  if (validPath.length >= 2 && dynamicTrackLine) {
+  if (dynamicTrackLine) {
     mapInstance.setFitView([elderMarker, dynamicTrackLine], false, [40, 40, 40, 40], 17)
   } else {
     mapInstance.setCenter(position)
@@ -291,32 +290,26 @@ function updateRealMarker(point) {
 function updateRealTrack(track) {
   if (!mapInstance || !aMapSdk) return
 
-  const path = formatPolylinePath(track)
-  if (path.length >= 2) {
-    if (!dynamicTrackLine) {
-      dynamicTrackLine = new aMapSdk.Polyline({
-        path,
-        strokeColor: "#3366FF",
-        strokeWeight: 6,
-        strokeOpacity: 0.9,
-        lineJoin: "round",
-        lineCap: "round",
-        zIndex: 20,
-      })
-      mapInstance.add(dynamicTrackLine)
-    } else {
-      dynamicTrackLine.setPath(path)
-    }
-    if (elderMarker) {
-      mapInstance.setFitView([elderMarker, dynamicTrackLine], false, [40, 40, 40, 40], 17)
-    }
-  } else {
-    if (dynamicTrackLine) {
-      dynamicTrackLine.setPath([])
-    }
-    if (elderMarker && props.latestPoint && isValidCoordinate(props.latestPoint)) {
-      mapInstance.setCenter([props.latestPoint.longitude, props.latestPoint.latitude])
-    }
+  dynamicTrackLine = syncAMapPolyline({
+    aMap: aMapSdk,
+    map: mapInstance,
+    polyline: dynamicTrackLine,
+    points: track,
+    enabled: props.status === "READY",
+    options: {
+      strokeColor: "#3366FF",
+      strokeWeight: 6,
+      strokeOpacity: 0.9,
+      lineJoin: "round",
+      lineCap: "round",
+      zIndex: 20,
+    },
+  })
+
+  if (dynamicTrackLine && elderMarker) {
+    mapInstance.setFitView([elderMarker, dynamicTrackLine], false, [40, 40, 40, 40], 17)
+  } else if (elderMarker && props.latestPoint && isValidCoordinate(props.latestPoint)) {
+    mapInstance.setCenter([props.latestPoint.longitude, props.latestPoint.latitude])
   }
 }
 
@@ -618,12 +611,10 @@ watch(
 
 watch(
   () => props.status,
-  (newStatus) => {
+  () => {
     if (props.realMode) {
       updateRealMarker(props.latestPoint)
-      if (newStatus !== "READY" && dynamicTrackLine) {
-        dynamicTrackLine.setPath([])
-      }
+      updateRealTrack(props.trackPoints)
     }
   },
 )

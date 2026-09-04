@@ -1,4 +1,26 @@
-const API_BASE = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+
+export function resolveApiBaseUrl(configuredBase, browserLocation = globalThis.location) {
+  const base = String(configuredBase || '').replace(/\/$/, '')
+  if (!base || !browserLocation?.origin) return base
+
+  try {
+    const apiUrl = new URL(base, browserLocation.origin)
+    if (
+      LOOPBACK_HOSTS.has(apiUrl.hostname) &&
+      LOOPBACK_HOSTS.has(browserLocation.hostname) &&
+      apiUrl.hostname !== browserLocation.hostname
+    ) {
+      apiUrl.hostname = browserLocation.hostname
+      return apiUrl.toString().replace(/\/$/, '')
+    }
+  } catch {
+    return base
+  }
+  return base
+}
+
+const API_BASE = resolveApiBaseUrl(import.meta.env?.VITE_API_BASE_URL || '')
 
 export class ApiError extends Error {
   constructor(message, { status = null, code = null, hasResponse = false, cause } = {}) {

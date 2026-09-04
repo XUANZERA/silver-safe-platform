@@ -17,10 +17,12 @@ test('LOC UI contains the required truthful technical states and foreground noti
   const elderHome = source('../src/views/elder/ElderHome.vue')
   for (const copy of [
     '未开启',
-    '正在请求定位权限',
+    '等待定位授权',
+    '请允许浏览器访问您的位置；若未看到提示，请点击地址栏左侧的定位图标。',
     '定位守护运行中',
     '定位暂不可用',
-    '定位权限被拒绝',
+    '定位权限未开启',
+    '请在浏览器的网站权限中允许定位后再试。',
     '当前浏览器不支持定位',
     '定位守护需要保持页面运行。'
   ]) {
