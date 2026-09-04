@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { showDialog, showFailToast, showSuccessToast } from 'vant'
 import { alertApi } from '../../services/api'
+import { emergencyContactPresentation } from '../../services/modeBoundary'
 import { runOperatorAlertAction } from '../../services/operatorAlerts'
 
 const props = defineProps({
@@ -12,7 +13,7 @@ const props = defineProps({
 const emit = defineEmits(['changed'])
 const filter = ref('全部')
 const selected = ref(null)
-const resolution = ref('已联系家属并持续关注')
+const resolution = ref('')
 const actionAlertId = ref(null)
 const filters = ['全部', '待处理', '处理中', '已解决']
 const visibleAlerts = computed(() => filter.value === '全部' ? props.alerts : props.alerts.filter((item) => item.status === filter.value))
@@ -45,26 +46,33 @@ async function accept(alert) {
 }
 
 function contactFamily(alert) {
-  const notice = props.realMode ? '当前版本未接入拨号功能。' : '演示环境不会发起真实电话。'
-  showDialog({ title: '联系家属', message: `${alert.familyContact}\n${notice}`, confirmButtonText: '知道了' })
+  const presentation = emergencyContactPresentation(props.realMode)
+  const message = props.realMode ? presentation.message : `${alert.familyContact}\n演示环境不会发起真实电话。`
+  showDialog({ title: presentation.title, message, confirmButtonText: '知道了' })
 }
 
 async function resolveAlert() {
   if (!selected.value) return
+  const resolutionText = resolution.value.trim()
+  if (!resolutionText) {
+    showFailToast('请填写实际处置结果')
+    return
+  }
   const alert = selected.value
   actionAlertId.value = alert.id
   try {
     await runOperatorAlertAction({
       realMode: props.realMode,
-      action: () => alertApi.resolve(alert.id, resolution.value),
+      action: () => alertApi.resolve(alert.id, resolutionText),
       refresh: props.refreshAlerts,
       applyDemo: () => {
         alert.status = '已解决'
-        alert.resolution = resolution.value
+        alert.resolution = resolutionText
         emit('changed', alert.elderName)
       }
     })
     selected.value = null
+    resolution.value = ''
     showSuccessToast('告警已解决并记录')
   } catch (error) {
     showFailToast(error instanceof Error ? error.message : '告警处置失败')
@@ -83,7 +91,7 @@ async function resolveAlert() {
         <div class="card-top"><span :class="['level-icon', alert.level]"><van-icon :name="alert.level === 'urgent' ? 'bell' : 'warning-o'" /></span><div><strong>{{ alert.type }}</strong><p>{{ alert.elderName }} · {{ alert.time }}</p></div><em :class="`status-${alert.status}`">{{ alert.status }}</em></div>
         <p class="location"><van-icon name="location-o" />{{ alert.location }}</p>
         <p v-if="alert.resolution" class="resolution">处置记录：{{ alert.resolution }}</p>
-        <div v-if="alert.status !== '已解决'" class="card-actions"><button type="button" @click="contactFamily(alert)"><van-icon name="phone-o" />联系家属</button><button class="primary" type="button" :disabled="actionAlertId === alert.id" @click="accept(alert)">{{ actionAlertId === alert.id ? '提交中' : alert.status === '处理中' ? '继续处置' : '立即处理' }}</button></div>
+        <div v-if="alert.status !== '已解决'" class="card-actions"><button type="button" @click="contactFamily(alert)"><van-icon name="records-o" />查看紧急联系信息</button><button class="primary" type="button" :disabled="actionAlertId === alert.id" @click="accept(alert)">{{ actionAlertId === alert.id ? '提交中' : alert.status === '处理中' ? '继续处置' : '立即处理' }}</button></div>
       </article>
       <van-empty v-if="visibleAlerts.length === 0" description="当前没有相关告警" />
     </div>

@@ -5,8 +5,20 @@ import { useRouter } from 'vue-router'
 import { showConfirmDialog, showDialog, showFailToast, showSuccessToast } from 'vant'
 // FIX END: API 失败时向用户展示后端返回的真实错误。
 import { aiApi, alertApi, elderApi, isApiConfigured, tripApi } from '../../services/api'
+import { hasValidRealDestination, loadDemoItinerary, presentElderPlan, realDestinationOrPlaceholder, startTripForMode } from '../../services/modeBoundary'
 import { presentElderTripActionHint } from '../../services/modePresentation'
 import { presentSosFailure, presentSosSuccess, runSosSubmission } from '../../services/sosPresentation'
+import {
+  CREATE_RESULT,
+  CREATE_STATE,
+  START_RESULT,
+  canCreateRealTrip,
+  createTripAndRefresh,
+  isStartableTrip,
+  isValidDestination,
+  refreshUnknownCreation,
+  startTripAndRefresh
+} from '../../services/tripCreation'
 import logo from '../../assets/logo.png'
 
 const router = useRouter()
@@ -18,7 +30,14 @@ const showAiPlan = ref(false)
 // FIX START: 单独保存行程 ID，不能把老人 ID 当成行程 ID。
 const currentTripId = ref(null)
 const currentTripBackendStatus = ref(realMode ? null : 'active')
+const currentTrip = ref(realMode ? null : { id: 5001, destination: '天坛公园慢游', status: 'active' })
 const tripDataAvailable = ref(!realMode)
+const createTripVisible = ref(false)
+const destinationInput = ref('')
+const creatingTrip = ref(false)
+const refreshingUnknownTrip = ref(false)
+const startingTrip = ref(false)
+const createState = ref(CREATE_STATE.READY)
 const sosSending = ref(false)
 const sosResult = ref('')
 // FIX END: 单独保存行程 ID。
@@ -26,54 +45,138 @@ const showAiChat = ref(false)
 const aiInput = ref('')
 const aiLoading = ref(false)
 const aiMessages = ref([{ role: 'assistant', text: '您好，我是您的行程小助手。想去哪里，直接告诉我就好。' }])
-const elder = reactive({ id: realMode ? null : 1001, name: realMode ? '老人' : '张建国', age: realMode ? '--' : 72, family: realMode ? '已绑定家属' : '张小明', familyPhone: realMode ? '请在个人资料中查看' : '138****2256', destination: realMode ? '暂无行程' : '天坛公园慢游', lastUpdate: realMode ? '尚未同步' : '刚刚' })
+const elder = reactive({ id: realMode ? null : 1001, name: realMode ? '老人' : '张建国', age: realMode ? '--' : 72, family: realMode ? '当前接口未提供' : '张小明', familyPhone: realMode ? '当前接口未提供' : '138****2256', destination: realMode ? '' : '天坛公园慢游', lastUpdate: realMode ? '尚未同步' : '刚刚' })
 const isTripActive = computed(() => currentTripBackendStatus.value === 'active')
-const tripActionHint = computed(() => presentElderTripActionHint(realMode, isTripActive.value))
+const isCreateUnknown = computed(() => createState.value === CREATE_STATE.UNKNOWN)
+const showCreateTrip = computed(() => canCreateRealTrip({
+  realMode,
+  tripDataAvailable: tripDataAvailable.value,
+  currentTrip: currentTrip.value,
+  createState: createState.value
+}))
+const hasUsableDestination = computed(() => !realMode || hasValidRealDestination(currentTrip.value))
+const tripActionHint = computed(() => {
+  if (realMode && !tripDataAvailable.value) return '真实行程数据不可用'
+  if (realMode && !isTripActive.value && !hasValidRealDestination(currentTrip.value)) return '请先设置真实目的地'
+  return presentElderTripActionHint(realMode, isTripActive.value)
+})
+const tripActionDisabled = computed(() => realMode && (
+  !tripDataAvailable.value ||
+  (!isTripActive.value && (!isStartableTrip(currentTrip.value) || startingTrip.value))
+))
+const planPresentation = computed(() => presentElderPlan({ realMode, dataAvailable: tripDataAvailable.value, trip: currentTrip.value }))
 
 function applySavedItinerary() {
-  if (realMode) return
+  const items = loadDemoItinerary(realMode, sessionStorage)
+  const destinationItem = items?.[1] || items?.[0]
+  if (destinationItem?.title) elder.destination = destinationItem.title
+}
+
+function applyCurrentTrip(trip) {
+  currentTrip.value = trip
+  currentTripId.value = trip?.id ?? null
+  currentTripBackendStatus.value = trip?.status ?? null
+  elder.destination = realDestinationOrPlaceholder(trip, '')
+  tripDataAvailable.value = true
+
+  if (!trip) {
+    tripStatus.value = '暂无进行中的真实行程'
+    locationStatus.value = '当前没有进行中的行程'
+  } else {
+    tripStatus.value = trip.status === 'active' ? '出游中' : '待出发'
+    locationStatus.value = trip.status === 'active' ? '等待定位上报' : '定位已暂停'
+  }
+}
+
+function applyCurrentTripFailure() {
+  currentTrip.value = null
+  currentTripId.value = null
+  currentTripBackendStatus.value = null
+  elder.destination = ''
+  tripDataAvailable.value = false
+  tripStatus.value = '行程状态不可用'
+  locationStatus.value = '无法获取最新状态'
+}
+
+async function loadCurrentTrip() {
+  if (!realMode || !elder.id) throw new Error('没有可用的老人资料')
   try {
-    const items = JSON.parse(sessionStorage.getItem('helpingold-itinerary') || '[]')
-    const destinationItem = items[1] || items[0]
-    if (destinationItem?.title) elder.destination = destinationItem.title
-  } catch { sessionStorage.removeItem('helpingold-itinerary') }
+    const trip = await elderApi.currentTrip(elder.id)
+    applyCurrentTrip(trip)
+    return trip
+  } catch (error) {
+    applyCurrentTripFailure()
+    throw error
+  }
 }
 
 onMounted(async () => {
-  applySavedItinerary()
-  if (!realMode) return
+  if (!realMode) {
+    applySavedItinerary()
+    return
+  }
   try {
     const list = await elderApi.list()
     const current = list?.items?.[0]
     if (!current) throw new Error('没有可用的老人资料')
     Object.assign(elder, { id: current.id, name: current.name, age: current.age ?? '--' })
-    if (elder.id) {
-      const trip = await elderApi.currentTrip(elder.id)
-      // FIX START: 用后端返回的行程 ID 和状态初始化页面。
-      if (trip) {
-        currentTripId.value = trip.id
-        currentTripBackendStatus.value = trip.status
-        Object.assign(elder, { destination: trip.destination })
-        tripStatus.value = trip.status === 'active' ? '出游中' : '待出发'
-        locationStatus.value = trip.status === 'active' ? '等待定位上报' : '定位已暂停'
-      } else {
-        currentTripId.value = null
-        currentTripBackendStatus.value = null
-        tripStatus.value = '已返程'
-        locationStatus.value = '已停止定位'
-      }
-      // FIX END: 用后端返回的行程 ID 和状态初始化页面。
-    }
-    tripDataAvailable.value = true
+    await loadCurrentTrip()
   } catch (error) {
-    tripDataAvailable.value = false
-    currentTripBackendStatus.value = null
-    tripStatus.value = '行程状态不可用'
-    locationStatus.value = '无法获取最新状态'
+    applyCurrentTripFailure()
     console.warn('老人端后端数据加载失败', error)
   }
-  applySavedItinerary()
 })
+
+async function createRealTrip() {
+  if (!realMode || creatingTrip.value) return
+
+  const result = await createTripAndRefresh({
+    destination: destinationInput.value,
+    isPending: () => creatingTrip.value,
+    setPending: (pending) => { creatingTrip.value = pending },
+    createTrip: (destination) => tripApi.create(destination),
+    refreshTrip: loadCurrentTrip
+  })
+
+  if (result.type === CREATE_RESULT.INVALID) {
+    showFailToast('请输入有效目的地（最多 200 个字符）')
+    return
+  }
+  if (result.type === CREATE_RESULT.REJECTED) {
+    showFailToast(result.error?.message || '行程创建请求被拒绝')
+    return
+  }
+  if (result.type === CREATE_RESULT.UNKNOWN) {
+    createState.value = CREATE_STATE.UNKNOWN
+    return
+  }
+  if (result.type === CREATE_RESULT.CREATED || result.type === CREATE_RESULT.RECONCILED) {
+    createState.value = CREATE_STATE.READY
+    createTripVisible.value = false
+    destinationInput.value = ''
+    if (result.type === CREATE_RESULT.CREATED) showSuccessToast('安心行程创建成功')
+  }
+}
+
+async function refreshUnknownTripState() {
+  if (!realMode || refreshingUnknownTrip.value) return
+
+  const result = await refreshUnknownCreation({
+    isPending: () => refreshingUnknownTrip.value,
+    setPending: (pending) => { refreshingUnknownTrip.value = pending },
+    refreshTrip: loadCurrentTrip
+  })
+
+  if (result.type === CREATE_RESULT.READY) {
+    createState.value = CREATE_STATE.READY
+    return
+  }
+  if (result.type === CREATE_RESULT.RECONCILED) {
+    createState.value = CREATE_STATE.READY
+    createTripVisible.value = false
+    destinationInput.value = ''
+  }
+}
 
 // FIX START: 开始/结束行程时调用真实 API，并始终传递 trip.id。
 async function toggleTrip() {
@@ -88,12 +191,13 @@ async function toggleTrip() {
       if (realMode) {
         if (!currentTripId.value) throw new Error('没有可结束的行程')
         await tripApi.end(currentTripId.value)
-        currentTripId.value = null
+        await loadCurrentTrip()
+      } else {
+        currentTripBackendStatus.value = null
+        tripDataAvailable.value = true
+        tripStatus.value = '已返程'
+        locationStatus.value = '已停止定位'
       }
-      currentTripBackendStatus.value = null
-      tripDataAvailable.value = true
-      tripStatus.value = '已返程'
-      locationStatus.value = '已停止定位'
       showSuccessToast('出游已结束，辛苦了')
     } catch (error) {
       showFailToast(error instanceof Error ? error.message : '结束行程失败')
@@ -101,26 +205,42 @@ async function toggleTrip() {
     return
   }
 
-  try {
-    if (realMode) {
-      let tripId = currentTripId.value
-      if (!tripId) {
-        const createdTrip = await tripApi.create(elder.destination)
-        tripId = createdTrip.id
-        currentTripId.value = createdTrip.id
-        currentTripBackendStatus.value = createdTrip.status
-      }
-      const startedTrip = await tripApi.start(tripId)
-      currentTripId.value = startedTrip.id
-      currentTripBackendStatus.value = startedTrip.status
+  if (!realMode) {
+    try {
+      await startTripForMode({
+        realMode,
+        trip: currentTrip.value,
+        startExisting: (tripId) => tripApi.start(tripId),
+        startDemo: async () => ({ id: currentTripId.value, destination: elder.destination, status: 'active' })
+      })
+      currentTripBackendStatus.value = 'active'
+      tripDataAvailable.value = true
+      tripStatus.value = '出游中'
+      locationStatus.value = '模拟定位正常'
+      showSuccessToast('演示行程已开始，正在显示模拟位置')
+    } catch (error) {
+      showFailToast(error instanceof Error ? error.message : '开始行程失败')
     }
-    if (!realMode) currentTripBackendStatus.value = 'active'
-    tripDataAvailable.value = true
-    tripStatus.value = '出游中'
-    locationStatus.value = realMode ? '等待定位上报' : '模拟定位正常'
-    showSuccessToast(realMode ? '出游已开始，等待定位数据上报' : '演示行程已开始，正在显示模拟位置')
-  } catch (error) {
-    showFailToast(error instanceof Error ? error.message : '开始行程失败')
+    return
+  }
+
+  if (startingTrip.value) return
+  const result = await startTripAndRefresh({
+    trip: currentTrip.value,
+    isPending: () => startingTrip.value,
+    setPending: (pending) => { startingTrip.value = pending },
+    startTrip: (tripId) => tripApi.start(tripId),
+    refreshTrip: loadCurrentTrip
+  })
+
+  if (result.type === START_RESULT.INVALID) {
+    showFailToast('只有待出发且目的地有效的行程可以开始')
+  } else if (result.type === START_RESULT.REJECTED) {
+    showFailToast(result.error?.message || '开始行程请求被拒绝')
+  } else if (result.type === START_RESULT.UNKNOWN) {
+    showFailToast('行程状态暂时无法确认，请稍后刷新页面')
+  } else if (result.trip?.status === 'active') {
+    showSuccessToast('出游已开始，等待定位数据上报')
   }
 }
 // FIX END: 开始/结束行程时调用真实 API，并始终传递 trip.id。
@@ -128,7 +248,7 @@ async function toggleTrip() {
 async function emergency() {
   if (sosSending.value) return
   if (!realMode) {
-    showDialog({ title: '紧急联系（演示）', message: `演示联系人：${elder.family}\n电话：${elder.familyPhone}\n\n这是演示操作，不会向后端发送求助。`, confirmButtonText: '知道了' })
+    showDialog({ title: '紧急求助（演示）', message: '这是 SOS 演示操作，不会向后端发送告警，也不会发起电话拨号。', confirmButtonText: '知道了' })
     return
   }
   if (!tripDataAvailable.value) {
@@ -159,7 +279,7 @@ async function emergency() {
 
 function confirmAiPlan() {
   showAiPlan.value = false
-  showSuccessToast('AI 已记住今天的安排')
+  if (!realMode) showSuccessToast('演示安排已记住')
 }
 
 async function sendAiMessage() {
@@ -185,25 +305,28 @@ function go(path) { router.push(path) }
 
 <template>
   <div class="elder-page">
-    <header class="elder-header"><div class="brand"><img class="brand-logo" :src="logo" alt="星斗守眼安游"/><strong>银发独游</strong></div><button type="button" aria-label="个人信息" @click="go('/elder/profile')"><van-icon name="manager-o" /></button><p>您好，{{ elder.name }}</p><small>{{ elder.age }} 岁 · 家人守护中</small></header>
+    <header class="elder-header"><div class="brand"><img class="brand-logo" :src="logo" alt="星斗守眼安游"/><strong>银发独游</strong></div><button type="button" aria-label="个人信息" @click="go('/elder/profile')"><van-icon name="manager-o" /></button><p>您好，{{ elder.name }}</p><small>{{ elder.age }} 岁 · {{ realMode ? '真实模式' : '演示守护中' }}</small></header>
     <main class="elder-content">
-      <section class="status-card"><div class="status-icon"><van-icon :name="isTripActive ? 'location-o' : 'home-o'" /></div><div><small>当前状态</small><strong>{{ tripStatus }}</strong><p v-if="isTripActive">正在前往：{{ elder.destination }}</p><p v-else>欢迎回家，今天辛苦了</p></div><span :class="['status-dot', { off: !isTripActive }]" /></section>
+      <section class="status-card"><div class="status-icon"><van-icon :name="isTripActive ? 'location-o' : 'home-o'" /></div><div><small>当前状态</small><strong>{{ tripStatus }}</strong><p v-if="isTripActive && hasUsableDestination">正在前往：{{ elder.destination }}</p><p v-else-if="realMode && !tripDataAvailable">后端行程数据不可用</p><p v-else-if="realMode && currentTrip && !hasUsableDestination">行程目的地无效，请先设置真实目的地</p><p v-else-if="realMode && currentTrip">待出发：{{ elder.destination }}</p><p v-else>{{ realMode ? '当前没有进行中的真实行程' : '欢迎回家，今天辛苦了' }}</p></div><span :class="['status-dot', { off: !isTripActive }]" /></section>
       <!-- FIX START: 显示脚本中随 API 行程状态更新的 locationStatus。 -->
       <section class="location-card"><div><small>我的位置</small><strong>{{ locationStatus }}</strong><p>{{ isTripActive ? (realMode ? '等待定位数据上传后供家人查看' : '演示：显示模拟位置') : (realMode ? '开始出游后等待定位数据上传' : '演示：开始后显示模拟定位') }}</p></div><van-icon :class="{ paused: !isTripActive }" name="aim" /></section>
       <!-- FIX END: 显示真实的 locationStatus。 -->
-      <button class="plan-card" type="button" @click="go('/schedule')"><div class="plan-title"><div><small>今日出游计划</small><strong>天坛公园慢游</strong></div><van-icon name="arrow" /></div><div class="plan-row"><span><b>08:30</b><small>专车到家</small></span><i></i><span><b>09:00</b><small>到达公园</small></span><i></i><span><b>15:30</b><small>专车回家</small></span></div><p><van-icon name="info-o" /> 沿平整步道游览，途中有休息区</p></button>
-      <button class="main-action" type="button" @click="toggleTrip"><van-icon :name="isTripActive ? 'stop-circle-o' : 'play-circle-o'" /><span>{{ isTripActive ? '结束本次出游' : '开始出游' }}</span><small>{{ tripActionHint }}</small></button>
+      <button class="plan-card" type="button" @click="go('/schedule')"><div class="plan-title"><div><small>今日出游计划</small><strong>{{ planPresentation.title }}</strong></div><van-icon name="arrow" /></div><template v-if="planPresentation.kind === 'demo'"><div class="plan-row"><span><b>08:30</b><small>专车到家</small></span><i></i><span><b>09:00</b><small>到达公园</small></span><i></i><span><b>15:30</b><small>专车回家</small></span></div><p><van-icon name="info-o" /> 演示：沿平整步道游览，途中有休息区</p></template><p v-else-if="planPresentation.kind === 'ready'"><van-icon name="info-o" /> 目的地来自后端；当前接口未提供详细时间安排</p><p v-else><van-icon name="info-o" /> {{ planPresentation.title }}</p></button>
+      <section v-if="isCreateUnknown" class="create-state-card"><strong>行程请求结果暂时无法确认</strong><van-button block round type="primary" color="#667eea" :loading="refreshingUnknownTrip" :disabled="refreshingUnknownTrip" @click="refreshUnknownTripState">刷新行程状态</van-button></section>
+      <button v-else-if="showCreateTrip" class="create-trip-entry" type="button" @click="createTripVisible = true"><van-icon name="plus" /><span>设置目的地</span></button>
+      <button class="main-action" type="button" :disabled="tripActionDisabled" @click="toggleTrip"><van-icon :name="isTripActive ? 'stop-circle-o' : 'play-circle-o'" /><span>{{ isTripActive ? '结束本次出游' : '开始出游' }}</span><small>{{ tripActionHint }}</small></button>
       <!-- FIX START: 给已经实现但没有入口的仿真组件增加可见入口。 -->
-      <section class="quick-actions"><button type="button" @click="go('/schedule')"><span class="purple"><van-icon name="todo-list-o" /></span><strong>我的行程</strong><small>查看今天安排</small></button><button type="button" @click="go('/simulation')"><span class="purple"><van-icon name="aim" /></span><strong>定位仿真</strong><small>测试轨迹与围栏告警</small></button><button type="button" :disabled="sosSending" @click="emergency"><span class="red"><van-icon name="phone-o" /></span><strong>{{ sosSending ? '正在发送' : '紧急求助' }}</strong><small>{{ realMode ? '发送至后端告警中心' : '演示操作' }}</small></button></section>
+      <section class="quick-actions"><button type="button" @click="go('/schedule')"><span class="purple"><van-icon name="todo-list-o" /></span><strong>我的行程</strong><small>查看今天安排</small></button><button v-if="!realMode" type="button" @click="go('/simulation')"><span class="purple"><van-icon name="aim" /></span><strong>定位仿真</strong><small>演示轨迹与围栏告警</small></button><button type="button" :disabled="sosSending" @click="emergency"><span class="red"><van-icon name="warning-o" /></span><strong>{{ sosSending ? '正在发送' : '紧急求助' }}</strong><small>{{ realMode ? '发送至后端告警中心' : '演示操作' }}</small></button></section>
       <p v-if="sosResult" class="sos-result">{{ sosResult }}</p>
       <!-- FIX END: 给仿真组件增加可见入口。 -->
       <button class="ai-plan-card" type="button" @click="showAiChat = true"><span class="ai-badge"><van-icon name="service-o" /></span><div><small>AI 行程管家</small><strong>和小助手说说您的出游想法</strong><p>我会帮您整理安排，确认后再上传</p></div><van-icon name="arrow" /></button>
       <button class="more-button" type="button" @click="showMore = !showMore">{{ showMore ? '收起更多' : '更多信息' }} <van-icon :name="showMore ? 'arrow-up' : 'arrow-down'" /></button>
-      <div v-if="showMore" class="more-card"><van-cell title="目的地" :value="elder.destination"/><van-cell title="最后更新" :value="elder.lastUpdate"/><van-cell title="紧急联系人" :value="elder.family"/><van-cell title="联系电话" :value="elder.familyPhone"/></div>
+      <div v-if="showMore" class="more-card"><van-cell title="目的地" :value="elder.destination || '暂无真实行程'"/><van-cell title="最后更新" :value="elder.lastUpdate"/><van-cell title="紧急联系人" :value="elder.family"/><van-cell title="联系电话" :value="elder.familyPhone"/></div>
       <p class="privacy-note">{{ realMode ? '真实模式 · SOS 结果以后端 Alert 为准' : '演示页面 · 姓名、位置和联系电话均为虚构数据' }}</p>
     </main>
-    <van-popup v-model:show="showAiPlan" round position="bottom" :style="{ padding: '20px 16px 24px' }"><div class="ai-plan-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>AI 已为您安排</strong><small>不用操作，我会按时提醒您</small></div></div><div class="ai-timeline"><p><b>08:30</b><span>专车到家</span></p><p><b>09:00</b><span>到达天坛公园，慢慢游览</span></p><p><b>15:30</b><span>专车接您回家</span></p></div><van-button block round type="primary" color="#667eea" @click="confirmAiPlan">好的，我知道了</van-button></div></van-popup>
-    <van-popup v-model:show="showAiChat" round position="bottom" :style="{ padding: '18px 16px 20px' }"><div class="ai-chat-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>行程小助手</strong><small>告诉我想去哪里、什么时候出发</small></div></div><div class="ai-messages"><div v-for="(item, index) in aiMessages" :key="index" :class="['ai-message', item.role]"><span>{{ item.text }}</span></div><div v-if="aiLoading" class="ai-message assistant"><span>正在帮您想一想…</span></div></div><div class="ai-quick"><button type="button" @click="aiInput='帮我安排明天去天坛公园'">安排明天出游</button><button type="button" @click="aiInput='看看我今天的行程'">查看今天行程</button></div><div class="ai-input-row"><van-field v-model="aiInput" clearable placeholder="例如：帮我安排明天出游" @keyup.enter="sendAiMessage"/><van-button round type="primary" color="#667eea" :loading="aiLoading" @click="sendAiMessage">发送</van-button></div><van-button block round plain type="primary" @click="showAiPlan = true; showAiChat = false">查看今日安排</van-button></div></van-popup>
+    <van-popup v-model:show="createTripVisible" round position="bottom" :close-on-click-overlay="!creatingTrip && !isCreateUnknown" :close-on-popstate="!creatingTrip && !isCreateUnknown" :style="{ padding: '20px 16px 24px' }"><div v-if="isCreateUnknown" class="create-trip-popup create-unknown-popup"><strong>行程请求结果暂时无法确认</strong><van-button block round type="primary" color="#667eea" :loading="refreshingUnknownTrip" :disabled="refreshingUnknownTrip" @click="refreshUnknownTripState">刷新行程状态</van-button></div><div v-else class="create-trip-popup"><strong>创建安心行程</strong><van-field v-model="destinationInput" label="目的地" maxlength="200" show-word-limit clearable placeholder="请输入目的地" @keyup.enter="createRealTrip"/><div class="create-trip-buttons"><van-button round plain :disabled="creatingTrip" @click="createTripVisible = false">取消</van-button><van-button round type="primary" color="#667eea" :loading="creatingTrip" :disabled="creatingTrip || !isValidDestination(destinationInput)" @click="createRealTrip">创建安心行程</van-button></div></div></van-popup>
+    <van-popup v-model:show="showAiPlan" round position="bottom" :style="{ padding: '20px 16px 24px' }"><div class="ai-plan-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>{{ realMode ? '后端真实行程' : 'AI 演示安排' }}</strong><small>{{ realMode ? '仅展示后端已返回的数据' : '演示提醒，不会写入真实业务状态' }}</small></div></div><div v-if="!realMode" class="ai-timeline"><p><b>08:30</b><span>专车到家</span></p><p><b>09:00</b><span>到达天坛公园，慢慢游览</span></p><p><b>15:30</b><span>专车接您回家</span></p></div><div v-else class="ai-timeline"><p><b>目的地</b><span>{{ realDestinationOrPlaceholder(currentTrip) }}</span></p><p><b>详情</b><span>当前后端未提供详细时间安排</span></p></div><van-button block round type="primary" color="#667eea" @click="confirmAiPlan">{{ realMode ? '关闭' : '好的，我知道了' }}</van-button></div></van-popup>
+    <van-popup v-model:show="showAiChat" round position="bottom" :style="{ padding: '18px 16px 20px' }"><div class="ai-chat-popup"><div class="ai-popup-title"><span class="ai-badge"><van-icon name="service-o" /></span><div><strong>行程小助手</strong><small>告诉我想去哪里、什么时候出发</small></div></div><div class="ai-messages"><div v-for="(item, index) in aiMessages" :key="index" :class="['ai-message', item.role]"><span>{{ item.text }}</span></div><div v-if="aiLoading" class="ai-message assistant"><span>正在帮您想一想…</span></div></div><div class="ai-quick"><button type="button" @click="aiInput='帮我安排明天出游'">安排明天出游</button><button type="button" @click="aiInput='看看我今天的行程'">查看今天行程</button></div><div class="ai-input-row"><van-field v-model="aiInput" clearable placeholder="例如：帮我安排明天出游" @keyup.enter="sendAiMessage"/><van-button round type="primary" color="#667eea" :loading="aiLoading" @click="sendAiMessage">发送</van-button></div><van-button block round plain type="primary" @click="showAiPlan = true; showAiChat = false">查看今日安排</van-button></div></van-popup>
     <nav class="elder-nav"><button class="active" type="button"><van-icon name="home-o"/><small>首页</small></button><button type="button" @click="go('/schedule')"><van-icon name="todo-list-o"/><small>行程</small></button><button type="button" @click="go('/elder/profile')"><van-icon name="manager-o"/><small>我的</small></button></nav>
   </div>
 </template>
@@ -238,4 +361,5 @@ function go(path) { router.push(path) }
 .ai-quick { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 9px; }.ai-quick button { flex: none; padding: 7px 10px; color: #6657a5; border: 1px solid #e1dcf3; border-radius: 14px; background: #faf9fe; font-size: 10px; }
 .ai-input-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }.ai-input-row :deep(.van-cell) { flex: 1; padding: 8px 10px; border-radius: 20px; background: #f5f5f5; }.ai-input-row .van-button { width: 58px; height: 36px; padding: 0; font-size: 11px; }
 .quick-actions button:disabled{cursor:wait;opacity:.65}.sos-result{margin:10px 2px 0;padding:9px 11px;color:#6657a5;border-radius:9px;background:#f0edfb;font-size:10px;line-height:1.5}
+.create-trip-entry{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;margin-top:12px;padding:13px;color:#6657a5;border:1px solid #ded7f3;border-radius:12px;background:#fff;font-size:15px;font-weight:700}.create-state-card{display:grid;gap:12px;margin-top:12px;padding:15px;color:#6657a5;border:1px solid #ded7f3;border-radius:12px;background:#fff}.create-state-card strong{text-align:center;font-size:14px}.create-trip-popup{display:grid;gap:16px;color:#323233}.create-trip-popup>strong{font-size:19px}.create-trip-popup :deep(.van-cell){padding:10px 0}.create-trip-buttons{display:grid;grid-template-columns:1fr 2fr;gap:10px}.create-unknown-popup{padding-top:4px;text-align:center}
 </style>

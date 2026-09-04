@@ -9,7 +9,7 @@ const routes = [
   { path: '/operator/profile', name: 'OperatorProfile', component: () => import('../views/operator/OperatorProfile.vue'), meta: { title: '运营端个人信息', requiresOperator: true } },
   { path: '/schedule', name: 'Schedule', component: () => import('../views/schedule/schedule.vue'), meta: { title: '旅游行程单', allowedRoles: ['elder', 'family'] } },
   // FIX START: 恢复 PR 前被 App.vue 直接挂载、PR 后却失去入口的仿真页面。
-  { path: '/simulation', name: 'Simulation', component: () => import('../components/map/MapCanvas.vue'), meta: { title: '定位仿真 · 银发独游', allowedRoles: ['elder'] } },
+  { path: '/simulation', name: 'Simulation', component: () => import('../components/map/MapCanvas.vue'), meta: { title: '定位仿真 · 银发独游', allowedRoles: ['elder'], demoOnly: true } },
   // FIX END: 恢复仿真页面入口。
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/404.vue'), meta: { title: '页面未找到', noCache: true } },
 ]
