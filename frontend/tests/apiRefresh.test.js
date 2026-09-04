@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createApiClient } from '../src/services/api.js'
+import { ApiError, createApiClient } from '../src/services/api.js'
 
 function jsonResponse(status, payload) {
   return {
@@ -139,4 +139,62 @@ test('AUTH-LOGOUT-001 calls backend logout and clears the access token even on f
     { path: '/auth/logout', authorization: 'Bearer operator-token' },
     { path: '/after-logout', authorization: undefined }
   ])
+})
+
+test('API-ERROR-001 preserves HTTP status, backend code, message, and response presence', async (t) => {
+  for (const status of [400, 403, 409, 422, 500]) {
+    await t.test(String(status), async () => {
+      const client = createApiClient({
+        baseUrl: 'https://api.test',
+        fetchImpl: async () => jsonResponse(status, {
+          error: { code: `BACKEND_${status}`, message: `backend message ${status}` }
+        })
+      })
+
+      await assert.rejects(
+        client.request('/failure', {}, false),
+        (error) => {
+          assert.ok(error instanceof ApiError)
+          assert.equal(error.message, `backend message ${status}`)
+          assert.equal(error.status, status)
+          assert.equal(error.code, `BACKEND_${status}`)
+          assert.equal(error.hasResponse, true)
+          return true
+        }
+      )
+    })
+  }
+})
+
+test('API-ERROR-002 reliably exposes a backend 409 conflict', async () => {
+  const client = createApiClient({
+    baseUrl: 'https://api.test',
+    fetchImpl: async () => jsonResponse(409, {
+      error: { code: 'UNFINISHED_TRIP_EXISTS', message: '当前已有未完成的出游任务' }
+    })
+  })
+
+  await assert.rejects(
+    client.request('/trips', { method: 'POST' }, false),
+    (error) => error.status === 409 && error.code === 'UNFINISHED_TRIP_EXISTS'
+  )
+})
+
+test('API-ERROR-003 wraps fetch rejection without claiming an HTTP response', async () => {
+  const client = createApiClient({
+    baseUrl: 'https://api.test',
+    fetchImpl: async () => { throw new TypeError('Failed to fetch') }
+  })
+
+  await assert.rejects(
+    client.request('/offline'),
+    (error) => {
+      assert.ok(error instanceof ApiError)
+      assert.equal(error.message, 'Failed to fetch')
+      assert.equal(error.status, null)
+      assert.equal(error.code, null)
+      assert.equal(error.hasResponse, false)
+      return true
+    }
+  )
 })

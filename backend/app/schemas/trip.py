@@ -14,12 +14,16 @@ class TripStatus(StrEnum):
 class TripCreateRequest(BaseModel):
     destination: str = Field(min_length=1, max_length=200)
 
-    @field_validator("destination")
+    @field_validator("destination", mode="before")
     @classmethod
-    def validate_destination(cls, value: str) -> str:
+    def validate_destination(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
         clean = value.strip()
         if not clean:
             raise ValueError("目的地不能为空")
+        if clean in {"暂无行程", "暂无真实行程"}:
+            raise ValueError("目的地不能使用系统保留值")
         return clean
 
 

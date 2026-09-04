@@ -1,14 +1,32 @@
 const API_BASE = (import.meta.env?.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
+export class ApiError extends Error {
+  constructor(message, { status = null, code = null, hasResponse = false, cause } = {}) {
+    super(message, cause === undefined ? undefined : { cause })
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.hasResponse = hasResponse
+  }
+}
+
 export function createApiClient({ baseUrl, fetchImpl = (...args) => globalThis.fetch(...args) }) {
   let accessToken = ''
   let refreshPromise = null
 
   async function request(path, options = {}, retry = true) {
-    if (!baseUrl) throw new Error('API_DISABLED')
+    if (!baseUrl) throw new ApiError('API_DISABLED', { code: 'API_DISABLED' })
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`
-    const response = await fetchImpl(`${baseUrl}${path}`, { ...options, headers, credentials: 'include' })
+    let response
+    try {
+      response = await fetchImpl(`${baseUrl}${path}`, { ...options, headers, credentials: 'include' })
+    } catch (error) {
+      throw new ApiError(error instanceof Error ? error.message : '网络请求失败', {
+        hasResponse: false,
+        cause: error
+      })
+    }
     if (response.status === 401 && retry && path !== '/auth/refresh') {
       try {
         await refreshSession()
@@ -18,7 +36,16 @@ export function createApiClient({ baseUrl, fetchImpl = (...args) => globalThis.f
       }
     }
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(payload?.error?.message || payload?.message || payload?.detail || '请求失败')
+    if (!response.ok) {
+      throw new ApiError(
+        payload?.error?.message || payload?.message || payload?.detail || '请求失败',
+        {
+          status: response.status,
+          code: payload?.error?.code || payload?.code || null,
+          hasResponse: true
+        }
+      )
+    }
     return Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
   }
 
