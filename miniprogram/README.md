@@ -5,7 +5,7 @@
 ## 本地与真机运行配置
 
 1. 在微信开发者工具中导入本目录。
-2. 在 `config.js` 中把 `apiBaseUrl` 改为可访问的 Backend `/api/v1` 地址（Demo 账号已统一在 `config.js` 的 `demo` 字段中维护）。
+2. 开发版自动使用 `config.js` 中的 `API_BASE_URL.development`；发布志愿者体验版前，把 `API_BASE_URL.testing` 改为可访问的 Backend HTTPS `/api/v1` 地址。
 3. Backend 启动并存在 active trip 后，进入老人页点击“开启定位守护”；家属页可查看地图与安全状态。
 
 ### 微信开发者工具关闭域名校验方法
@@ -25,7 +25,7 @@
 2. **配置 request 合法域名**：
    - 登录 [微信公众平台](https://mp.weixin.qq.com/) 后台，进入 **「开发」->「开发管理」->「开发设置」->「服务器域名」**。
    - 在 **`request 合法域名`** 中添加 Backend API 所在的公网 HTTPS 域名（例如 `https://api.yourdomain.com`）。
-   - 将 `config.js` 中的 `apiBaseUrl` 修改为已配置的 HTTPS 地址。
+   - 将 `config.js` 中的 `API_BASE_URL.testing` 修改为已配置的 HTTPS 地址。
 3. **局域网真机临时联调（仅限开发阶段临时使用）**：
    - 若在开发阶段手机与电脑连接同一局域网 Wi-Fi，且希望临时直连电脑内网 IP：
    - 在手机端打开小程序预览版后，点击右上角 **「···」** 胶囊菜单 -> 选择 **「开发调试」** -> 点击 **「打开调试」**。

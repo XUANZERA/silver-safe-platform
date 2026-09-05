@@ -1,7 +1,7 @@
 from functools import lru_cache
 from ipaddress import ip_network
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,10 +56,11 @@ class Settings(BaseSettings):
     sos_rate_limit_per_ip: int = Field(default=10, ge=1, le=1000)
     alert_read_audit_window_seconds: int = Field(default=60, ge=10, le=3600)
     audit_retention_days: int = 180
+    test_account_password: SecretStr | None = None
 
     @property
     def secure_cookies(self) -> bool:
-        return self.app_env.lower() == "production"
+        return self.app_env.lower() in {"testing", "production"}
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
@@ -69,15 +70,25 @@ class Settings(BaseSettings):
             except ValueError as exc:
                 raise ValueError(f"无效的可信代理网段：{network}") from exc
 
-        if self.app_env.lower() != "production":
+        environment = self.app_env.lower()
+        if environment == "testing":
+            if self.database_url == "sqlite:///./data/silver_safe.db":
+                raise ValueError("测试环境必须配置独立 DATABASE_URL")
+            if (
+                self.test_account_password is None
+                or len(self.test_account_password.get_secret_value()) < 8
+            ):
+                raise ValueError("测试环境必须配置至少 8 位的 TEST_ACCOUNT_PASSWORD")
+
+        if environment not in {"testing", "production"}:
             return self
         if self.debug:
-            raise ValueError("生产环境不得启用 DEBUG")
+            raise ValueError("公网环境不得启用 DEBUG")
         weak_prefixes = ("local-", "development-", "replace-")
         if self.secret_key.startswith(weak_prefixes):
-            raise ValueError("生产环境必须通过 SECRET_KEY 配置独立随机密钥")
+            raise ValueError("公网环境必须通过 SECRET_KEY 配置独立随机密钥")
         if self.health_info_encryption_key.startswith(weak_prefixes):
-            raise ValueError("生产环境必须通过 HEALTH_INFO_ENCRYPTION_KEY 配置独立加密密钥")
+            raise ValueError("公网环境必须通过 HEALTH_INFO_ENCRYPTION_KEY 配置独立加密密钥")
         if self.secret_key == self.health_info_encryption_key:
             raise ValueError("JWT 签名密钥与健康信息加密密钥必须相互独立")
         return self

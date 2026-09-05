@@ -56,10 +56,18 @@ def init_database() -> None:
     import app.models  # noqa: F401
     from app.db.schema_compat import add_legacy_coordinate_columns
     from app.services.security_maintenance import prune_expired_security_data
-    from app.services.seed import seed_demo_data
+    from app.services.seed import seed_environment_data
 
     Base.metadata.create_all(bind=engine)
     add_legacy_coordinate_columns(engine)
     with SessionLocal() as session:
-        seed_demo_data(session)
+        seed_environment_data(
+            session,
+            app_env=settings.app_env,
+            test_account_password=(
+                settings.test_account_password.get_secret_value()
+                if settings.test_account_password is not None
+                else None
+            ),
+        )
         prune_expired_security_data(session)

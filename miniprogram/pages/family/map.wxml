@@ -1,12 +1,12 @@
 <view class="page">
   <view class="card">
     <view class="title">家属安全地图</view>
-    <view class="subtitle">位置、定位健康度和记录时间均来自 Backend Safety View。</view>
-    <navigator class="link" url="/pages/elder/index">前往老人定位守护</navigator>
+    <view class="subtitle">查看老人最近一次位置、更新时间和安全状态。</view>
+    <navigator class="link" url="/pages/elder/index">切换到老人端</navigator>
   </view>
 
   <view class="card" wx:if="{{!loggedIn}}">
-    <view class="section-title">登录 Backend</view>
+    <view class="section-title">账号登录</view>
     <view class="field">
       <text class="field-label">用户名</text>
       <input class="input" value="{{username}}" bindinput="onUsernameInput" placeholder="家属账号" />
@@ -26,20 +26,19 @@
         <text class="row-value">{{elder.name || elder.id || '--'}}</text>
       </view>
       <view class="row">
-        <text class="row-label">location_health</text>
-        <text class="row-value health">{{locationHealth}}</text>
+        <text class="row-label">安全状态</text>
+        <text class="row-value health">{{riskStatusText}}</text>
       </view>
       <view class="row">
-        <text class="row-label">recorded_at</text>
-        <text class="row-value">{{recordedAt}}</text>
+        <text class="row-label">定位状态</text>
+        <text class="row-value">{{locationHealthText}}</text>
       </view>
       <view class="row">
-        <text class="row-label">WGS84 位置</text>
-        <text class="row-value" wx:if="{{hasLocation}}">{{latitude}}, {{longitude}}</text>
-        <text class="row-value" wx:else>暂无位置</text>
+        <text class="row-label">更新时间</text>
+        <text class="row-value">{{recordedAtText}}</text>
       </view>
       <view class="button-row">
-        <button class="primary-button" loading="{{loadingSafety}}" bindtap="loadSafety">刷新 Safety View</button>
+        <button class="primary-button" loading="{{loadingSafety}}" bindtap="loadSafety">刷新安全信息</button>
         <button class="secondary-button" bindtap="handleLogout">退出</button>
       </view>
     </view>
@@ -53,10 +52,16 @@
         scale="16"
         show-location="{{false}}"
       ></map>
-      <view class="map-note">蓝点为 Backend 最新记录位置，不代表实时位置。</view>
+      <view class="map-note">蓝点为最近一次定位，不代表实时位置。</view>
     </view>
-    <view class="card muted" wx:else>Safety View 暂无可展示的 WGS84 位置。</view>
+    <view class="card muted" wx:else>暂无可展示的位置。</view>
   </block>
+
+  <view class="card feedback-card">
+    <view class="section-title">体验反馈</view>
+    <view class="muted">如遇到使用困难、功能异常，或有改进建议，请告诉我们。</view>
+    <button class="secondary-button feedback-button" open-type="feedback">提交反馈</button>
+  </view>
 
   <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
 </view>

@@ -2,11 +2,11 @@
   <view class="card">
     <view class="title">老人定位守护</view>
     <view class="subtitle">定位只会在您点击开启后运行，离开或刷新页面即停止。</view>
-    <navigator class="link" url="/pages/family/map">前往家属地图</navigator>
+    <navigator class="link" url="/pages/family/map">切换到家属端</navigator>
   </view>
 
   <view class="card" wx:if="{{!loggedIn}}">
-    <view class="section-title">登录 Backend</view>
+    <view class="section-title">账号登录</view>
     <view class="field">
       <text class="field-label">用户名</text>
       <input class="input" value="{{username}}" bindinput="onUsernameInput" placeholder="老人账号" />
@@ -32,28 +32,23 @@
     </view>
 
     <view class="card">
-      <view class="section-title">Active trip</view>
-      <block wx:if="{{hasActiveTrip}}">
-        <view class="row">
-          <text class="row-label">行程 ID</text>
-          <text class="row-value">{{currentTrip.id}}</text>
-        </view>
+      <view class="section-title">今日任务</view>
+      <block wx:if="{{currentTrip}}">
         <view class="row">
           <text class="row-label">目的地</text>
           <text class="row-value">{{currentTrip.destination}}</text>
         </view>
         <view class="row">
-          <text class="row-label">Backend 状态</text>
-          <text class="row-value">{{currentTrip.status}}</text>
+          <text class="row-label">任务状态</text>
+          <text class="row-value">{{tripStatusText}}</text>
         </view>
       </block>
-      <view class="muted" wx:elif="{{currentTrip}}">当前未完成行程状态为 {{currentTrip.status}}，尚不是 active trip。</view>
-      <view class="muted" wx:else>Backend 当前没有 active trip。</view>
+      <view class="muted" wx:else>今天暂时没有出行任务。</view>
     </view>
 
     <view class="card">
       <view class="section-title">定位状态</view>
-      <view class="status status-{{locationStatus}}">{{locationStatus}} · {{locationStatusText}}</view>
+      <view class="status status-{{locationStatus}}">{{locationStatusText}}</view>
       <view class="button-row">
         <button wx:if="{{!guardRunning}}" class="primary-button" disabled="{{!hasActiveTrip}}" bindtap="handleStartGuard">开启定位守护</button>
         <button wx:else class="secondary-button" bindtap="handleStopGuard">停止定位守护</button>
@@ -61,6 +56,12 @@
       </view>
     </view>
   </block>
+
+  <view class="card feedback-card">
+    <view class="section-title">体验反馈</view>
+    <view class="muted">如遇到使用困难、功能异常，或有改进建议，请告诉我们。</view>
+    <button class="secondary-button feedback-button" open-type="feedback">提交反馈</button>
+  </view>
 
   <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
 </view>

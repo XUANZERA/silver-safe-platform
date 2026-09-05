@@ -3,6 +3,7 @@
 const api = require('../../services/api')
 const config = require('../../config')
 const { createLocationService, LOCATION_STATUS } = require('../../services/location')
+const { userFacingError } = require('../../services/userMessage')
 
 const STATUS_TEXT = Object.freeze({
   [LOCATION_STATUS.IDLE]: '未开启',
@@ -12,19 +13,25 @@ const STATUS_TEXT = Object.freeze({
   [LOCATION_STATUS.PERMISSION_DENIED]: '定位权限已拒绝'
 })
 
-function errorMessage(error, fallback) {
-  return error?.message || error?.errMsg || fallback
+const TRIP_STATUS_TEXT = Object.freeze({
+  created: '待开始',
+  active: '进行中'
+})
+
+function tripStatusText(status) {
+  return TRIP_STATUS_TEXT[status] || '暂无进行中的任务'
 }
 
 Page({
   data: {
-    username: config.demo?.elder?.username || '',
-    password: config.demo?.elder?.password || '',
+    username: '',
+    password: '',
     loggedIn: false,
     user: null,
     loggingIn: false,
     loadingTrip: false,
     currentTrip: null,
+    tripStatusText: '',
     hasActiveTrip: false,
     locationStatus: LOCATION_STATUS.IDLE,
     locationStatusText: STATUS_TEXT[LOCATION_STATUS.IDLE],
@@ -49,10 +56,10 @@ Page({
       onError: ({ phase, permissionDenied }) => {
         if (this.destroyed) return
         const message = permissionDenied
-          ? '定位权限被拒绝，请在小程序设置中允许位置信息后重新开启。'
+          ? '请开启定位权限'
           : phase === 'upload'
-            ? '位置上传失败，守护会继续重试。'
-            : '暂时无法取得位置，守护会继续重试。'
+            ? '位置上传失败，定位守护会继续重试'
+            : '暂时无法获取位置，定位守护会继续重试'
         this.setData({ errorText: message })
       }
     })
@@ -98,6 +105,7 @@ Page({
         throw new Error('请使用老人账号登录此页面')
       }
       this.setData({ loggedIn: true, user })
+      this.setData({ password: '' })
       await this.loadCurrentTrip()
     } catch (error) {
       this.setData({
@@ -105,7 +113,7 @@ Page({
         user: null,
         currentTrip: null,
         hasActiveTrip: false,
-        errorText: errorMessage(error, '登录失败')
+        errorText: userFacingError(error, '登录失败，请检查账号和密码')
       })
     } finally {
       this.setData({ loggingIn: false })
@@ -125,7 +133,7 @@ Page({
       api.clearAccessToken()
       this.setData({
         loggedIn: false,
-        errorText: errorMessage(error, '登录状态已失效，请重新登录')
+        errorText: userFacingError(error, '登录状态已失效，请重新登录')
       })
     }
   },
@@ -136,7 +144,7 @@ Page({
     try {
       const elderList = await api.listElders()
       const elder = elderList?.items?.[0]
-      if (!elder?.id) throw new Error('Backend 未返回可访问的老人资料')
+      if (!elder?.id) throw new Error('missing elder')
       const trip = await api.getCurrentTrip(elder.id)
       const hasActiveTrip = trip?.status === 'active'
 
@@ -146,13 +154,18 @@ Page({
       ) {
         this.stopLocationGuard()
       }
-      this.setData({ currentTrip: trip, hasActiveTrip })
+      this.setData({
+        currentTrip: trip,
+        hasActiveTrip,
+        tripStatusText: tripStatusText(trip?.status)
+      })
     } catch (error) {
       this.stopLocationGuard()
       this.setData({
         currentTrip: null,
         hasActiveTrip: false,
-        errorText: errorMessage(error, '当前行程加载失败')
+        tripStatusText: '',
+        errorText: userFacingError(error, '今日任务加载失败，请稍后重试')
       })
       if (error?.status === 401) this.setData({ loggedIn: false, user: null })
     } finally {
@@ -162,7 +175,7 @@ Page({
 
   handleStartGuard() {
     if (!this.data.hasActiveTrip) {
-      this.setData({ errorText: 'Backend 当前没有 active trip，无法开启定位守护。' })
+      this.setData({ errorText: '当前没有可开启定位的今日任务' })
       return
     }
     this.setData({ errorText: '' })
@@ -170,7 +183,7 @@ Page({
       this.locationService.start(this.data.currentTrip)
       this.setData({ guardRunning: this.locationService.isRunning() })
     } catch (error) {
-      this.setData({ errorText: errorMessage(error, '定位守护启动失败') })
+      this.setData({ errorText: userFacingError(error, '定位守护启动失败，请稍后重试') })
     }
   },
 
@@ -193,7 +206,7 @@ Page({
           resolve(res)
         },
         fail: (error) => {
-          this.setData({ errorText: errorMessage(error, '打开设置失败') })
+          this.setData({ errorText: userFacingError(error, '打开设置失败，请稍后重试') })
           resolve(null)
         }
       })
@@ -208,6 +221,8 @@ Page({
       user: null,
       currentTrip: null,
       hasActiveTrip: false,
+      tripStatusText: '',
+      password: '',
       errorText: ''
     })
   }

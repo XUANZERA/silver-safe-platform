@@ -4,6 +4,19 @@ const PI = Math.PI
 const EARTH_SEMI_MAJOR_AXIS = 6378245
 const ECCENTRICITY_SQUARED = 0.006693421622965943
 
+const LOCATION_HEALTH_TEXT = Object.freeze({
+  NO_DATA: '暂无定位信息',
+  FRESH: '定位正常',
+  STALE: '定位信息较久未更新',
+  INACCURATE: '定位精度较低'
+})
+
+const RISK_STATUS_TEXT = Object.freeze({
+  SAFE: '安全',
+  PENDING: '状态确认中',
+  ALERT: '请关注'
+})
+
 function outsideMainlandChina(latitude, longitude) {
   return longitude < 72.004 || longitude > 137.8347 || latitude < 0.8293 || latitude > 55.8271
 }
@@ -45,13 +58,20 @@ function wgs84ToGcj02(latitude, longitude) {
 
 function presentSafetyView(safetyView) {
   const location = safetyView?.latest_location || null
+  const locationHealth = safetyView?.location_health || null
+  const riskStatus = safetyView?.risk_status || null
   const mapCoordinate = location?.source_crs === 'WGS84'
     ? wgs84ToGcj02(location.latitude, location.longitude)
     : null
 
   return {
-    locationHealth: safetyView?.location_health || '--',
+    // 仅映射 Backend 已返回的状态用于展示，不在客户端重算安全或新鲜度。
+    locationHealth,
+    locationHealthText: LOCATION_HEALTH_TEXT[locationHealth] || '暂无定位信息',
+    riskStatus,
+    riskStatusText: RISK_STATUS_TEXT[riskStatus] || '暂无安全状态',
     recordedAt: location?.recorded_at || '--',
+    recordedAtText: formatRecordedAt(location?.recorded_at),
     sourceCrs: location?.source_crs || '--',
     latitude: location?.latitude ?? null,
     longitude: location?.longitude ?? null,
@@ -69,7 +89,17 @@ function presentSafetyView(safetyView) {
   }
 }
 
+function formatRecordedAt(value) {
+  if (!value) return '暂无更新时间'
+  const timestamp = new Date(value)
+  if (Number.isNaN(timestamp.getTime())) return '暂无更新时间'
+  return timestamp.toLocaleString('zh-CN', { hour12: false })
+}
+
 module.exports = {
+  LOCATION_HEALTH_TEXT,
+  RISK_STATUS_TEXT,
+  formatRecordedAt,
   presentSafetyView,
   wgs84ToGcj02
 }

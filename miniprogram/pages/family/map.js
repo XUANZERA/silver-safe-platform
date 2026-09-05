@@ -1,16 +1,16 @@
 'use strict'
 
 const api = require('../../services/api')
-const config = require('../../config')
 const { presentSafetyView } = require('../../services/map')
-
-function errorMessage(error, fallback) {
-  return error?.message || error?.errMsg || fallback
-}
+const { userFacingError } = require('../../services/userMessage')
 
 const EMPTY_SAFETY_VIEW = Object.freeze({
-  locationHealth: '--',
+  locationHealth: null,
+  locationHealthText: '暂无定位信息',
+  riskStatus: null,
+  riskStatusText: '暂无安全状态',
   recordedAt: '--',
+  recordedAtText: '暂无更新时间',
   sourceCrs: '--',
   latitude: null,
   longitude: null,
@@ -22,8 +22,8 @@ const EMPTY_SAFETY_VIEW = Object.freeze({
 
 Page({
   data: {
-    username: config.demo?.family?.username || '',
-    password: config.demo?.family?.password || '',
+    username: '',
+    password: '',
     loggedIn: false,
     user: null,
     loggingIn: false,
@@ -64,6 +64,7 @@ Page({
         throw new Error('请使用家属账号登录此页面')
       }
       this.setData({ loggedIn: true, user })
+      this.setData({ password: '' })
       await this.loadSafety()
     } catch (error) {
       this.setData({
@@ -72,7 +73,7 @@ Page({
         elder: null,
         safetyView: null,
         ...EMPTY_SAFETY_VIEW,
-        errorText: errorMessage(error, '登录失败')
+        errorText: userFacingError(error, '登录失败，请检查账号和密码')
       })
     } finally {
       this.setData({ loggingIn: false })
@@ -92,7 +93,7 @@ Page({
       api.clearAccessToken()
       this.setData({
         loggedIn: false,
-        errorText: errorMessage(error, '登录状态已失效，请重新登录')
+        errorText: userFacingError(error, '登录状态已失效，请重新登录')
       })
     }
   },
@@ -103,7 +104,7 @@ Page({
     try {
       const elderList = await api.listElders()
       const elder = elderList?.items?.[0]
-      if (!elder?.id) throw new Error('Backend 未返回可访问的老人资料')
+      if (!elder?.id) throw new Error('missing elder')
       const safetyView = await api.getSafetyView(elder.id)
       this.setData({
         elder,
@@ -115,7 +116,7 @@ Page({
         elder: null,
         safetyView: null,
         ...EMPTY_SAFETY_VIEW,
-        errorText: errorMessage(error, 'Safety View 加载失败')
+        errorText: userFacingError(error, '安全信息加载失败，请稍后重试')
       })
       if (error?.status === 401) this.setData({ loggedIn: false, user: null })
     } finally {
@@ -131,6 +132,7 @@ Page({
       elder: null,
       safetyView: null,
       ...EMPTY_SAFETY_VIEW,
+      password: '',
       errorText: ''
     })
   }
