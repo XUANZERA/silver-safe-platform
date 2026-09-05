@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const config = require('../config')
-
 test('elder page load and pull-down refresh remain IDLE without calling wx.getLocation', async () => {
   let pageDefinition
   let locationCalls = 0
@@ -23,8 +21,8 @@ test('elder page load and pull-down refresh remain IDLE without calling wx.getLo
     setData(update) { Object.assign(this.data, update) }
   }
 
-  assert.equal(page.data.username, config.demo.elder.username)
-  assert.equal(page.data.password, config.demo.elder.password)
+  assert.equal(page.data.username, '')
+  assert.equal(page.data.password, '')
 
   page.onLoad()
   assert.equal(page.data.locationStatus, 'IDLE')
@@ -68,7 +66,7 @@ test('elder page handleOpenSetting calls wx.openSetting and clears errorText', a
   delete global.wx
 })
 
-test('pages use config.demo without hardcoded credentials', () => {
+test('volunteer pages do not prefill test credentials', () => {
   let elderPageDef
   let familyPageDef
   global.wx = { getStorageSync() { return '' } }
@@ -82,12 +80,11 @@ test('pages use config.demo without hardcoded credentials', () => {
   require('../pages/elder/index')
   require('../pages/family/map')
 
-  assert.equal(elderPageDef.data.username, config.demo.elder.username)
-  assert.equal(elderPageDef.data.password, config.demo.elder.password)
-  assert.equal(familyPageDef.data.username, config.demo.family.username)
-  assert.equal(familyPageDef.data.password, config.demo.family.password)
+  assert.equal(elderPageDef.data.username, '')
+  assert.equal(elderPageDef.data.password, '')
+  assert.equal(familyPageDef.data.username, '')
+  assert.equal(familyPageDef.data.password, '')
 
   delete global.Page
   delete global.wx
 })
-

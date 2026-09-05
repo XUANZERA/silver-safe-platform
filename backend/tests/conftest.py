@@ -10,6 +10,8 @@ TEST_DATABASE = Path(__file__).resolve().parents[2] / "data" / "test_silver_safe
 TEST_DATABASE.parent.mkdir(parents=True, exist_ok=True)
 TEST_DATABASE.unlink(missing_ok=True)
 os.environ["DATABASE_URL"] = "sqlite:///./data/test_silver_safe.db"
+os.environ["APP_ENV"] = "development"
+os.environ["DEBUG"] = "false"
 
 from app.main import app  # noqa: E402
 

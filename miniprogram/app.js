@@ -5,6 +5,7 @@ const config = require('./config')
 
 App({
   onLaunch() {
-    configureApi({ baseUrl: config.apiBaseUrl })
+    const runtimeConfig = config.resolveConfig(wx)
+    configureApi({ baseUrl: runtimeConfig.apiBaseUrl })
   }
 })

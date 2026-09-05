@@ -57,6 +57,24 @@ python -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --por
 终端窗口必须保持运行。关闭终端后，访问接口会出现
 `ERR_CONNECTION_REFUSED`。
 
+## 志愿者测试环境部署
+
+志愿者测试环境使用根目录的 `.env.testing.example` 作为配置模板。将它复制为
+`.env` 后，替换其中的 JWT 密钥、健康信息加密密钥和测试账号密码；真实值不得提交
+到仓库。`APP_ENV=testing` 会强制使用独立数据库、关闭 DEBUG、启用安全 Cookie，
+并初始化 `elder_test_01`、`family_test_01` 及两者关系，不会初始化开发演示账号。
+
+从仓库根目录启动：
+
+```powershell
+python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+公网入口应由 HTTPS 反向代理转发至该进程。部署后访问
+`https://<测试域名>/api/v1/health` 检查运行状态，再将同一 HTTPS API 地址填写到
+`miniprogram/config.js` 的 `API_BASE_URL.testing`。测试数据库文件和 `.env` 均不得
+打包进小程序或提交到仓库。
+
 ## 演示账号
 
 三个账号的密码均为 `demo123`。

@@ -1,18 +1,38 @@
 'use strict'
 
-module.exports = Object.freeze({
-  // 真机调试时改为手机可访问且已加入微信 request 合法域名的 Backend 地址。
-  apiBaseUrl: 'http://192.168.10.197:8000/api/v1',
-  locationIntervalMs: 10000,
-  demo: Object.freeze({
-    elder: Object.freeze({
-      username: 'elder01',
-      password: 'demo123'
-    }),
-    family: Object.freeze({
-      username: 'family01',
-      password: 'demo123'
-    })
-  })
+const API_BASE_URL = Object.freeze({
+  development: 'http://127.0.0.1:8000/api/v1',
+  // 发布志愿者体验版前，将域名替换为已加入微信 request 合法域名的 HTTPS 地址。
+  testing: 'https://test-domain/api/v1'
 })
 
+const ENVIRONMENT_BY_VERSION = Object.freeze({
+  develop: 'development',
+  trial: 'testing',
+  release: 'testing'
+})
+
+function resolveEnvironment(wxApi) {
+  try {
+    const envVersion = wxApi?.getAccountInfoSync?.()?.miniProgram?.envVersion
+    return ENVIRONMENT_BY_VERSION[envVersion] || 'development'
+  } catch {
+    return 'development'
+  }
+}
+
+function resolveConfig(wxApi) {
+  const environment = resolveEnvironment(wxApi)
+  return Object.freeze({
+    environment,
+    apiBaseUrl: API_BASE_URL[environment],
+    locationIntervalMs: 10000
+  })
+}
+
+module.exports = Object.freeze({
+  API_BASE_URL,
+  resolveEnvironment,
+  resolveConfig,
+  ...resolveConfig(typeof wx === 'undefined' ? null : wx)
+})
