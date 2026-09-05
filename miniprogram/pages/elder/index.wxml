@@ -1,0 +1,66 @@
+<view class="page">
+  <view class="card">
+    <view class="title">老人定位守护</view>
+    <view class="subtitle">定位只会在您点击开启后运行，离开或刷新页面即停止。</view>
+    <navigator class="link" url="/pages/family/map">前往家属地图</navigator>
+  </view>
+
+  <view class="card" wx:if="{{!loggedIn}}">
+    <view class="section-title">登录 Backend</view>
+    <view class="field">
+      <text class="field-label">用户名</text>
+      <input class="input" value="{{username}}" bindinput="onUsernameInput" placeholder="老人账号" />
+    </view>
+    <view class="field">
+      <text class="field-label">密码</text>
+      <input class="input" value="{{password}}" password bindinput="onPasswordInput" placeholder="密码" />
+    </view>
+    <button class="primary-button" loading="{{loggingIn}}" disabled="{{loggingIn}}" bindtap="handleLogin">登录</button>
+  </view>
+
+  <block wx:if="{{loggedIn}}">
+    <view class="card">
+      <view class="section-title">当前账号</view>
+      <view class="row">
+        <text class="row-label">用户名</text>
+        <text class="row-value">{{user.username}}</text>
+      </view>
+      <view class="button-row">
+        <button class="secondary-button" loading="{{loadingTrip}}" bindtap="loadCurrentTrip">刷新行程</button>
+        <button class="secondary-button" bindtap="handleLogout">退出</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">Active trip</view>
+      <block wx:if="{{hasActiveTrip}}">
+        <view class="row">
+          <text class="row-label">行程 ID</text>
+          <text class="row-value">{{currentTrip.id}}</text>
+        </view>
+        <view class="row">
+          <text class="row-label">目的地</text>
+          <text class="row-value">{{currentTrip.destination}}</text>
+        </view>
+        <view class="row">
+          <text class="row-label">Backend 状态</text>
+          <text class="row-value">{{currentTrip.status}}</text>
+        </view>
+      </block>
+      <view class="muted" wx:elif="{{currentTrip}}">当前未完成行程状态为 {{currentTrip.status}}，尚不是 active trip。</view>
+      <view class="muted" wx:else>Backend 当前没有 active trip。</view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">定位状态</view>
+      <view class="status status-{{locationStatus}}">{{locationStatus}} · {{locationStatusText}}</view>
+      <view class="button-row">
+        <button wx:if="{{!guardRunning}}" class="primary-button" disabled="{{!hasActiveTrip}}" bindtap="handleStartGuard">开启定位守护</button>
+        <button wx:else class="secondary-button" bindtap="handleStopGuard">停止定位守护</button>
+        <button wx:if="{{locationStatus === 'PERMISSION_DENIED'}}" class="secondary-button" bindtap="handleOpenSetting">打开设置</button>
+      </view>
+    </view>
+  </block>
+
+  <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
+</view>

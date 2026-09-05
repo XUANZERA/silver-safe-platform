@@ -1,0 +1,62 @@
+<view class="page">
+  <view class="card">
+    <view class="title">家属安全地图</view>
+    <view class="subtitle">位置、定位健康度和记录时间均来自 Backend Safety View。</view>
+    <navigator class="link" url="/pages/elder/index">前往老人定位守护</navigator>
+  </view>
+
+  <view class="card" wx:if="{{!loggedIn}}">
+    <view class="section-title">登录 Backend</view>
+    <view class="field">
+      <text class="field-label">用户名</text>
+      <input class="input" value="{{username}}" bindinput="onUsernameInput" placeholder="家属账号" />
+    </view>
+    <view class="field">
+      <text class="field-label">密码</text>
+      <input class="input" value="{{password}}" password bindinput="onPasswordInput" placeholder="密码" />
+    </view>
+    <button class="primary-button" loading="{{loggingIn}}" disabled="{{loggingIn}}" bindtap="handleLogin">登录</button>
+  </view>
+
+  <block wx:if="{{loggedIn}}">
+    <view class="card">
+      <view class="section-title">安全状态</view>
+      <view class="row">
+        <text class="row-label">老人</text>
+        <text class="row-value">{{elder.name || elder.id || '--'}}</text>
+      </view>
+      <view class="row">
+        <text class="row-label">location_health</text>
+        <text class="row-value health">{{locationHealth}}</text>
+      </view>
+      <view class="row">
+        <text class="row-label">recorded_at</text>
+        <text class="row-value">{{recordedAt}}</text>
+      </view>
+      <view class="row">
+        <text class="row-label">WGS84 位置</text>
+        <text class="row-value" wx:if="{{hasLocation}}">{{latitude}}, {{longitude}}</text>
+        <text class="row-value" wx:else>暂无位置</text>
+      </view>
+      <view class="button-row">
+        <button class="primary-button" loading="{{loadingSafety}}" bindtap="loadSafety">刷新 Safety View</button>
+        <button class="secondary-button" bindtap="handleLogout">退出</button>
+      </view>
+    </view>
+
+    <view class="card map-card" wx:if="{{hasLocation}}">
+      <map
+        class="map"
+        latitude="{{mapLatitude}}"
+        longitude="{{mapLongitude}}"
+        circles="{{circles}}"
+        scale="16"
+        show-location="{{false}}"
+      ></map>
+      <view class="map-note">蓝点为 Backend 最新记录位置，不代表实时位置。</view>
+    </view>
+    <view class="card muted" wx:else>Safety View 暂无可展示的 WGS84 位置。</view>
+  </block>
+
+  <view class="error" wx:if="{{errorText}}">{{errorText}}</view>
+</view>

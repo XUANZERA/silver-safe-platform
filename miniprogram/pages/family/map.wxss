@@ -1,0 +1,20 @@
+.health {
+  color: #1677ff;
+  font-weight: 700;
+}
+
+.map-card {
+  overflow: hidden;
+  padding: 0;
+}
+
+.map {
+  width: 100%;
+  height: 620rpx;
+}
+
+.map-note {
+  padding: 20rpx 24rpx;
+  color: #667085;
+  font-size: 24rpx;
+}
