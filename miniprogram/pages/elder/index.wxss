@@ -1,0 +1,23 @@
+.status {
+  padding: 22rpx 24rpx;
+  border-radius: 16rpx;
+  background: #eef2f6;
+  font-weight: 600;
+}
+
+.status-REQUESTING {
+  background: #fff7e6;
+  color: #b54708;
+}
+
+.status-TRACKING {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.status-DEGRADED,
+.status-PERMISSION_DENIED {
+  background: #fef3f2;
+  color: #b42318;
+}
+
