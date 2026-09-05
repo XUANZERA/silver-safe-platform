@@ -1,17 +1,32 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.coordinates import CoordinateReferenceSystem
 from app.core.field_encryption import encrypt_health_info
 from app.core.security import hash_password
 from app.models.elder import Elder, ElderFamilyBinding
+from app.models.geofence import Geofence
 from app.models.trip import Trip
+from app.models.types import utc_now
 from app.models.user import User
-from app.services.trips import create_trip, get_current_trip, start_trip
+from app.services.trips import get_current_trip
 
 DEMO_PASSWORD = "demo123"
+VOLUNTEER_TEST_ACCOUNT_COUNT = 10
 TEST_ELDER_USERNAME = "elder_test_01"
 TEST_FAMILY_USERNAME = "family_test_01"
-TEST_TRIP_DESTINATION = "测试公园"
+TEST_TRIP_DESTINATION = "测试公园01"
+TEST_GEOFENCE_LATITUDE = 23.119990
+TEST_GEOFENCE_LONGITUDE = 113.324520
+TEST_GEOFENCE_RADIUS_METERS = 500
+
+
+def volunteer_test_username(role: str, group_number: int) -> str:
+    if role not in {"elder", "family"}:
+        raise ValueError(f"不支持的志愿者测试账号角色：{role}")
+    if not 1 <= group_number <= VOLUNTEER_TEST_ACCOUNT_COUNT:
+        raise ValueError(f"志愿者测试账号组号超出范围：{group_number}")
+    return f"{role}_test_{group_number:02d}"
 
 
 def _get_or_create_user(
@@ -86,46 +101,74 @@ def seed_demo_data(session: Session) -> None:
 
 
 def seed_volunteer_test_data(session: Session, *, password: str) -> None:
-    elder_user = _get_or_create_user(
-        session,
-        username=TEST_ELDER_USERNAME,
-        password=password,
-        role="elder",
-        phone=None,
-    )
-    family_user = _get_or_create_user(
-        session,
-        username=TEST_FAMILY_USERNAME,
-        password=password,
-        role="family",
-        phone=None,
-    )
-
-    elder = session.scalar(select(Elder).where(Elder.user_id == elder_user.id))
-    if elder is None:
-        elder = Elder(
-            user_id=elder_user.id,
-            name="测试老人",
-            age=None,
-            health_info=None,
+    for group_number in range(1, VOLUNTEER_TEST_ACCOUNT_COUNT + 1):
+        suffix = f"{group_number:02d}"
+        elder_user = _get_or_create_user(
+            session,
+            username=volunteer_test_username("elder", group_number),
+            password=password,
+            role="elder",
+            phone=None,
         )
-        session.add(elder)
-        session.flush()
-
-    binding = session.scalar(
-        select(ElderFamilyBinding).where(
-            ElderFamilyBinding.elder_id == elder.id,
-            ElderFamilyBinding.family_user_id == family_user.id,
+        family_user = _get_or_create_user(
+            session,
+            username=volunteer_test_username("family", group_number),
+            password=password,
+            role="family",
+            phone=None,
         )
-    )
-    if binding is None:
-        session.add(ElderFamilyBinding(elder_id=elder.id, family_user_id=family_user.id))
 
-    trip: Trip | None = get_current_trip(session, elder.id)
-    if trip is None:
-        trip = create_trip(session, elder, TEST_TRIP_DESTINATION)
-    if trip.status == "created":
-        start_trip(session, trip)
+        elder = session.scalar(select(Elder).where(Elder.user_id == elder_user.id))
+        if elder is None:
+            elder = Elder(
+                user_id=elder_user.id,
+                name=f"测试老人{suffix}",
+                age=None,
+                health_info=None,
+            )
+            session.add(elder)
+            session.flush()
+
+        binding = session.scalar(
+            select(ElderFamilyBinding).where(
+                ElderFamilyBinding.elder_id == elder.id,
+                ElderFamilyBinding.family_user_id == family_user.id,
+            )
+        )
+        if binding is None:
+            session.add(
+                ElderFamilyBinding(
+                    elder_id=elder.id,
+                    family_user_id=family_user.id,
+                )
+            )
+
+        geofence = session.get(Geofence, elder.id)
+        if geofence is None:
+            session.add(
+                Geofence(
+                    elder_id=elder.id,
+                    center_latitude=TEST_GEOFENCE_LATITUDE,
+                    center_longitude=TEST_GEOFENCE_LONGITUDE,
+                    radius_meters=TEST_GEOFENCE_RADIUS_METERS,
+                    enabled=True,
+                    crs=CoordinateReferenceSystem.WGS84.value,
+                )
+            )
+
+        trip: Trip | None = get_current_trip(session, elder.id)
+        if trip is None:
+            session.add(
+                Trip(
+                    elder_id=elder.id,
+                    destination=f"测试公园{suffix}",
+                    status="active",
+                    started_at=utc_now(),
+                )
+            )
+        elif trip.status == "created":
+            trip.status = "active"
+            trip.started_at = utc_now()
 
     session.commit()
 

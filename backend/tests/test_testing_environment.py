@@ -8,13 +8,19 @@ from app.core.config import Settings
 from app.core.security import verify_password
 from app.db.base import Base
 from app.models.elder import Elder, ElderFamilyBinding
+from app.models.geofence import Geofence
 from app.models.trip import Trip
 from app.models.user import User
 from app.services.seed import (
     TEST_ELDER_USERNAME,
     TEST_FAMILY_USERNAME,
+    TEST_GEOFENCE_LATITUDE,
+    TEST_GEOFENCE_LONGITUDE,
+    TEST_GEOFENCE_RADIUS_METERS,
     TEST_TRIP_DESTINATION,
+    VOLUNTEER_TEST_ACCOUNT_COUNT,
     seed_environment_data,
+    volunteer_test_username,
 )
 
 PUBLIC_SETTINGS = {
@@ -56,7 +62,7 @@ def test_testing_settings_use_secure_cookies() -> None:
     assert settings.secure_cookies is True
 
 
-def test_testing_seed_creates_required_accounts_binding_and_active_trip() -> None:
+def test_testing_seed_creates_ten_isolated_groups_with_geofences_and_active_trips() -> None:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
 
@@ -74,25 +80,51 @@ def test_testing_seed_creates_required_accounts_binding_and_active_trip() -> Non
         )
 
         users = session.scalars(select(User).order_by(User.username)).all()
-        elder = session.scalar(select(Elder))
-        binding = session.scalar(select(ElderFamilyBinding))
-        trips = session.scalars(select(Trip)).all()
+        elders = session.scalars(select(Elder).order_by(Elder.id)).all()
+        bindings = session.scalars(select(ElderFamilyBinding)).all()
+        geofences = session.scalars(select(Geofence).order_by(Geofence.elder_id)).all()
+        trips = session.scalars(select(Trip).order_by(Trip.elder_id)).all()
 
-    assert [(user.username, user.role) for user in users] == [
-        (TEST_ELDER_USERNAME, "elder"),
-        (TEST_FAMILY_USERNAME, "family"),
-    ]
+    expected_users = sorted(
+        [
+            (volunteer_test_username(role, group_number), role)
+            for group_number in range(1, VOLUNTEER_TEST_ACCOUNT_COUNT + 1)
+            for role in ("elder", "family")
+        ]
+    )
+    assert [(user.username, user.role) for user in users] == expected_users
+    assert volunteer_test_username("elder", 1) == TEST_ELDER_USERNAME
+    assert volunteer_test_username("family", 1) == TEST_FAMILY_USERNAME
+    assert TEST_TRIP_DESTINATION == "测试公园01"
     assert all(user.phone is None for user in users)
     assert all(verify_password("volunteer-secret", user.password_hash) for user in users)
-    assert elder is not None and elder.name == "测试老人"
-    assert elder.age is None and elder.health_info is None
-    assert binding is not None
-    assert binding.elder_id == elder.id
-    assert binding.family_user_id == next(
-        user.id for user in users if user.username == TEST_FAMILY_USERNAME
-    )
-    assert len(trips) == 1
-    assert trips[0].elder_id == elder.id
-    assert trips[0].destination == TEST_TRIP_DESTINATION
-    assert trips[0].status == "active"
-    assert trips[0].started_at is not None
+    assert len(elders) == VOLUNTEER_TEST_ACCOUNT_COUNT
+    assert all(elder.age is None and elder.health_info is None for elder in elders)
+    assert [elder.name for elder in elders] == [
+        f"测试老人{group_number:02d}" for group_number in range(1, VOLUNTEER_TEST_ACCOUNT_COUNT + 1)
+    ]
+
+    users_by_name = {user.username: user for user in users}
+    elders_by_user_id = {elder.user_id: elder for elder in elders}
+    assert len(bindings) == VOLUNTEER_TEST_ACCOUNT_COUNT
+    for group_number in range(1, VOLUNTEER_TEST_ACCOUNT_COUNT + 1):
+        elder_user = users_by_name[volunteer_test_username("elder", group_number)]
+        family_user = users_by_name[volunteer_test_username("family", group_number)]
+        elder = elders_by_user_id[elder_user.id]
+        assert [(item.elder_id, item.family_user_id) for item in bindings].count(
+            (elder.id, family_user.id)
+        ) == 1
+
+    assert len(geofences) == VOLUNTEER_TEST_ACCOUNT_COUNT
+    assert all(geofence.enabled is True for geofence in geofences)
+    assert all(geofence.crs == "WGS84" for geofence in geofences)
+    assert all(geofence.center_latitude == TEST_GEOFENCE_LATITUDE for geofence in geofences)
+    assert all(geofence.center_longitude == TEST_GEOFENCE_LONGITUDE for geofence in geofences)
+    assert all(geofence.radius_meters == TEST_GEOFENCE_RADIUS_METERS for geofence in geofences)
+
+    assert len(trips) == VOLUNTEER_TEST_ACCOUNT_COUNT
+    assert [trip.destination for trip in trips] == [
+        f"测试公园{group_number:02d}" for group_number in range(1, VOLUNTEER_TEST_ACCOUNT_COUNT + 1)
+    ]
+    assert all(trip.status == "active" for trip in trips)
+    assert all(trip.started_at is not None for trip in trips)

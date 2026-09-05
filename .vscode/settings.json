@@ -1,4 +1,16 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda"
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "git.autorefresh": false,
+    "git.autofetch": false,
+    "git.fetchOnOpen": false,
+    "git.autoRepositoryDetection": "openEditors",
+    "git.status.submodules": false,
+    "gitlens.views.repositories.autoRefresh": false,
+    "gitlens.graph.showBranchSummary": false,
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/.git/worktrees/**": true
+    }
 }
