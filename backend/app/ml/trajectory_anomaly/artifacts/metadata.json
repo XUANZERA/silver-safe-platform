@@ -1,0 +1,53 @@
+{
+  "feature_definitions": {
+    "direct_distance": "Haversine distance from first to last sample, in meters.",
+    "large_turn_count": "Wrapped heading changes >=100 degrees on segments >=max(8 m, 1.25x median accuracy).",
+    "longest_stop_seconds": "Longest anchor-radius episode with low cluster speed, in seconds.",
+    "max_speed": "Maximum Haversine segment distance / timestamp delta, in m/s.",
+    "mean_accuracy": "Arithmetic mean of available reported horizontal accuracy, in meters.",
+    "median_speed": "Median Haversine segment distance / positive timestamp delta, in m/s.",
+    "path_length": "Sum of adjacent Haversine distances, in meters.",
+    "speed_std": "Population standard deviation of Haversine segment speeds, in m/s.",
+    "stop_ratio": "Accepted low-movement episode seconds divided by window span, bounded to [0, 1].",
+    "tortuosity": "min(10, path_length / max(direct_distance, 10 m)); bounded for near-zero displacement."
+  },
+  "feature_names": [
+    "median_speed",
+    "speed_std",
+    "max_speed",
+    "path_length",
+    "direct_distance",
+    "tortuosity",
+    "longest_stop_seconds",
+    "stop_ratio",
+    "large_turn_count",
+    "mean_accuracy"
+  ],
+  "model_name": "trajectory_isolation_forest",
+  "model_parameters": {
+    "contamination": "auto",
+    "max_features": 1.0,
+    "max_samples": "auto",
+    "n_estimators": 200,
+    "n_jobs": -1,
+    "random_state": 42
+  },
+  "model_version": "v2",
+  "preprocessing": "none; Isolation Forest uses random feature splits",
+  "random_state": 42,
+  "score_direction": "higher_is_more_abnormal; anomaly_score=-decision_function",
+  "sklearn_version": "1.9.1",
+  "synthetic_generator_version": "v1",
+  "target_validation_fpr": 0.05,
+  "threshold": 0.039828209747568066,
+  "threshold_calibration": "held_out_validation_normal_only",
+  "threshold_calibration_training_trajectory_count": 300,
+  "threshold_calibration_training_window_count": 4921,
+  "training_data": "synthetic_normal_only",
+  "training_trajectory_count": 400,
+  "training_window_count": 6553,
+  "window_definition": "trailing_elapsed_time; inclusive observed samples; minimum 90% span",
+  "window_minimum_coverage_ratio": 0.9,
+  "window_seconds": 600,
+  "window_step_seconds": 60
+}

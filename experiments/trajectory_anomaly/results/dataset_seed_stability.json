@@ -1,0 +1,146 @@
+{
+  "aggregates": {
+    "abnormal_speed_pattern_trajectory_detection_rate": {
+      "max": 1.0,
+      "mean": 1.0,
+      "min": 1.0,
+      "std": 0.0
+    },
+    "circular_wandering_trajectory_detection_rate": {
+      "max": 1.0,
+      "mean": 0.952,
+      "min": 0.88,
+      "std": 0.0515363949069005
+    },
+    "long_stop_trajectory_detection_rate": {
+      "max": 1.0,
+      "mean": 1.0,
+      "min": 1.0,
+      "std": 0.0
+    },
+    "repeated_backtracking_trajectory_detection_rate": {
+      "max": 1.0,
+      "mean": 1.0,
+      "min": 1.0,
+      "std": 0.0
+    },
+    "test_normal_any_window_trip_fpr": {
+      "max": 0.2,
+      "mean": 0.16,
+      "min": 0.12,
+      "std": 0.027568097504180447
+    },
+    "test_normal_window_fpr": {
+      "max": 0.0815450643776824,
+      "mean": 0.05548354807795297,
+      "min": 0.036307692307692305,
+      "std": 0.017432908493307087
+    }
+  },
+  "dataset_seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "fixed_model_random_state": 42,
+  "seed_metrics": [
+    {
+      "abnormal_speed_pattern_any_window_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_window_detection_rate": 1.0,
+      "circular_wandering_any_window_trajectory_detection_rate": 0.9,
+      "circular_wandering_trajectory_detection_rate": 0.9,
+      "circular_wandering_window_detection_rate": 0.8049382716049382,
+      "dataset_seed": 42,
+      "long_stop_any_window_trajectory_detection_rate": 1.0,
+      "long_stop_trajectory_detection_rate": 1.0,
+      "long_stop_window_detection_rate": 0.5605326876513317,
+      "model_seed": 42,
+      "repeated_backtracking_any_window_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_window_detection_rate": 0.8397040690505548,
+      "test_normal_any_window_trip_fpr": 0.15,
+      "test_normal_window_fpr": 0.04631322364411944,
+      "threshold": 0.039828209747568066
+    },
+    {
+      "abnormal_speed_pattern_any_window_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_window_detection_rate": 1.0,
+      "circular_wandering_any_window_trajectory_detection_rate": 1.0,
+      "circular_wandering_trajectory_detection_rate": 1.0,
+      "circular_wandering_window_detection_rate": 0.9392059553349876,
+      "dataset_seed": 43,
+      "long_stop_any_window_trajectory_detection_rate": 1.0,
+      "long_stop_trajectory_detection_rate": 1.0,
+      "long_stop_window_detection_rate": 0.6486486486486487,
+      "model_seed": 42,
+      "repeated_backtracking_any_window_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_window_detection_rate": 0.841717791411043,
+      "test_normal_any_window_trip_fpr": 0.18,
+      "test_normal_window_fpr": 0.07051671732522796,
+      "threshold": 0.042748115232253414
+    },
+    {
+      "abnormal_speed_pattern_any_window_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_window_detection_rate": 1.0,
+      "circular_wandering_any_window_trajectory_detection_rate": 0.88,
+      "circular_wandering_trajectory_detection_rate": 0.88,
+      "circular_wandering_window_detection_rate": 0.750924784217016,
+      "dataset_seed": 44,
+      "long_stop_any_window_trajectory_detection_rate": 1.0,
+      "long_stop_trajectory_detection_rate": 1.0,
+      "long_stop_window_detection_rate": 0.5458937198067633,
+      "model_seed": 42,
+      "repeated_backtracking_any_window_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_window_detection_rate": 0.8708487084870848,
+      "test_normal_any_window_trip_fpr": 0.15,
+      "test_normal_window_fpr": 0.036307692307692305,
+      "threshold": 0.05679111618825483
+    },
+    {
+      "abnormal_speed_pattern_any_window_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_window_detection_rate": 1.0,
+      "circular_wandering_any_window_trajectory_detection_rate": 1.0,
+      "circular_wandering_trajectory_detection_rate": 1.0,
+      "circular_wandering_window_detection_rate": 0.90875,
+      "dataset_seed": 45,
+      "long_stop_any_window_trajectory_detection_rate": 1.0,
+      "long_stop_trajectory_detection_rate": 1.0,
+      "long_stop_window_detection_rate": 0.6373626373626373,
+      "model_seed": 42,
+      "repeated_backtracking_any_window_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_window_detection_rate": 0.8548780487804878,
+      "test_normal_any_window_trip_fpr": 0.2,
+      "test_normal_window_fpr": 0.0815450643776824,
+      "threshold": 0.04765913169919378
+    },
+    {
+      "abnormal_speed_pattern_any_window_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_trajectory_detection_rate": 1.0,
+      "abnormal_speed_pattern_window_detection_rate": 1.0,
+      "circular_wandering_any_window_trajectory_detection_rate": 0.98,
+      "circular_wandering_trajectory_detection_rate": 0.98,
+      "circular_wandering_window_detection_rate": 0.8748466257668711,
+      "dataset_seed": 46,
+      "long_stop_any_window_trajectory_detection_rate": 1.0,
+      "long_stop_trajectory_detection_rate": 1.0,
+      "long_stop_window_detection_rate": 0.6002430133657352,
+      "model_seed": 42,
+      "repeated_backtracking_any_window_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_trajectory_detection_rate": 1.0,
+      "repeated_backtracking_window_detection_rate": 0.8578431372549019,
+      "test_normal_any_window_trip_fpr": 0.12,
+      "test_normal_window_fpr": 0.042735042735042736,
+      "threshold": 0.050926233071582616
+    }
+  ],
+  "window_seconds": 600
+}

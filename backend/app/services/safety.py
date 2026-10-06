@@ -12,6 +12,7 @@ from app.schemas.safety import LocationHealth, RiskStatus, SafetyViewResponse
 from app.services.alerts import ALERT_LOAD_OPTIONS, alert_to_response
 from app.services.locations import get_latest_trip_location
 from app.services.risk import evaluate_geofence_risk
+from app.services.trajectory_anomaly import evaluate_trip_window, unknown_result
 from app.services.trips import get_current_trip
 
 OPEN_ALERT_STATUSES = ("new", "processing")
@@ -52,6 +53,11 @@ def get_safety_view(db: Session, *, elder_id: int) -> SafetyViewResponse:
         ):
             risk_status = RiskStatus(evaluation.status.value)
 
+    if trip is not None and trip.status == "active":
+        trajectory_attention = evaluate_trip_window(db, trip_id=trip.id)
+    else:
+        trajectory_attention = unknown_result(("NO_ACTIVE_TRIP",))
+
     open_filters = (
         Alert.elder_id == elder_id,
         Alert.status.in_(OPEN_ALERT_STATUSES),
@@ -76,6 +82,7 @@ def get_safety_view(db: Session, *, elder_id: int) -> SafetyViewResponse:
         trip_status=trip.status if trip is not None else None,
         location_health=location_health,
         risk_status=risk_status,
+        trajectory_attention=trajectory_attention,
         open_alert_count=open_alert_count,
         latest_location=latest_location_response,
         latest_open_alert=latest_open_alert_response,
