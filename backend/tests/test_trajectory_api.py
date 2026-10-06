@@ -16,11 +16,11 @@ def test_safety_view_exposes_anomaly_separately_from_geofence_risk(
     client: TestClient,
 ) -> None:
     _, trip_id, elder_id = start_trip(client, with_geofence=True)
-    start = datetime.now(UTC) - timedelta(seconds=40 * 15)
+    start = datetime.now(UTC) - timedelta(seconds=48 * 15)
     with SessionLocal() as session:
         trip = session.get(Trip, trip_id)
         trip.started_at = start
-        for index in range(41):
+        for index in range(49):
             north_meters = 0.0 if index % 2 == 0 else 100.0
             session.add(
                 Location(
@@ -71,11 +71,11 @@ def test_safety_view_without_active_trip_reports_unknown_attention(client: TestC
 
 def test_model_failure_keeps_safety_response_and_risk_status(client, monkeypatch) -> None:
     _, trip_id, elder_id = start_trip(client, with_geofence=True)
-    start = datetime.now(UTC) - timedelta(seconds=40 * 15)
+    start = datetime.now(UTC) - timedelta(seconds=48 * 15)
     with SessionLocal() as session:
         trip = session.get(Trip, trip_id)
         trip.started_at = start
-        for index in range(41):
+        for index in range(49):
             session.add(
                 Location(
                     trip_id=trip_id,

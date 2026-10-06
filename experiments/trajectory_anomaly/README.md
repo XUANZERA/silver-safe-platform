@@ -61,3 +61,33 @@ python -m pytest backend/tests
 ```
 
 The backend loads the saved artifact once on first valid scoring request. If it is missing or incompatible, `trajectory_attention.status` is `UNKNOWN` with `MODEL_UNAVAILABLE`; the existing `risk_status` path remains independent.
+
+## Temporal product policy (V3)
+
+The Isolation Forest still scores each 10-minute window independently with the unchanged V2 artifact and threshold. The product service converts the last three `NORMAL`/`ATTENTION`/`UNKNOWN` window states into one response using **C: at least two anomalous windows in the latest three**. This temporal decision is a separate service-layer operation; it is not an ML feature. `trajectory_attention.score` remains the raw score for the latest window. Until three complete window states are available, the product status is `UNKNOWN / TEMPORAL_HISTORY_INSUFFICIENT`. A currently unknown window remains `UNKNOWN`; an earlier unknown breaks consecutive evidence and counts as non-anomalous for voting.
+
+The candidates and tie-break protocol were recorded in `results/temporal_policy_protocol.json` before scoring validation/development data. “Clearly lower” was operationalized as at least a 5 percentage-point paired reduction in validation-normal trajectory alert rate and one-sided exact McNemar `p < 0.05` against A. Detection was the unweighted mean of the four behavioral scenario trajectory rates; ties used pooled median delay from event-evidence availability, then rule simplicity. Test normal and the independent stress holdout were excluded until C was frozen.
+
+| Policy | Validation window FPR | Validation normal trajectories alerted | Alerts/trajectory | Development behavioral detection macro | Median delay from evidence |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A: any single window | 5.51% | 20/100 (20%) | 0.34 | 100.0% | 604.7 s |
+| B: 2 consecutive | 5.51% | 15/100 (15%) | 0.19 | 99.0% | 671.4 s |
+| C: at least 2 of latest 3 | 5.51% | 15/100 (15%) | 0.20 | 99.5% | 736.0 s |
+| D: at least 3 of latest 5 | 5.51% | 13/100 (13%) | 0.14 | 99.5% | 867.2 s |
+
+B and C each reduced validation trajectory alerts by 5 points (`p = 0.03125`); D reduced them by 7 points (`p = 0.0078125`). C and D tied on behavioral detection; C had the shorter median delay and was frozen. Their validation scenario detection was: long-stop 100%, backtracking 100%, circular 98%, abnormal-speed 100%. Full selection metrics and the artifact hash are in `results/temporal_policy_selection.json`.
+
+The one final holdout pass compared V2 single-window aggregation with frozen V3 C using the same V2 scores:
+
+| Metric | V2 single-window | V3 temporal C |
+| --- | ---: | ---: |
+| Test-normal window FPR | 5.36% | 5.36% |
+| Test-normal trajectories with any ATTENTION | 14/100 (14%) | 12/100 (12%) |
+| Test-normal alert episodes per trajectory | 0.21 | 0.13 |
+| Long-stop event-aware trajectory detection | 50/50 (100%) | 50/50 (100%) |
+| Backtracking event-aware trajectory detection | 50/50 (100%) | 50/50 (100%) |
+| Circular event-aware trajectory detection | 47/50 (94%) | 47/50 (94%) |
+| Abnormal-speed event-aware trajectory detection | 50/50 (100%) | 50/50 (100%) |
+| Pooled median detection delay from evidence | 604.8 s | 735.2 s |
+
+On this holdout, trajectory alert rate fell by 2 points and alert episodes by about 38%; pooled median detection delay increased by about 130 seconds. The final run is saved at `results/temporal_policy_frozen_test.json`. Its evaluator refuses to run again once that file exists. These synthetic results do not establish real-world alert quality.

@@ -15,9 +15,19 @@ from app.ml.trajectory_anomaly.features import FeatureExtractionError, GpsPoint
 from app.ml.trajectory_anomaly.inference import infer_trajectory
 from app.ml.trajectory_anomaly.model import ModelBundle, TrajectoryModelError, load_artifact
 from app.ml.trajectory_anomaly.quality import assess_quality
-from app.ml.trajectory_anomaly.windows import WINDOW_SECONDS, latest_window
+from app.ml.trajectory_anomaly.windows import (
+    WINDOW_SECONDS,
+    WINDOW_STEP_SECONDS,
+    latest_window,
+    sliding_windows,
+)
 from app.models.location import Location
 from app.schemas.trajectory import TrajectoryAttentionResponse, TrajectoryAttentionStatus
+from app.services.trajectory_temporal import (
+    POLICY_REQUIREMENTS,
+    SELECTED_TEMPORAL_POLICY,
+    apply_temporal_policy,
+)
 
 logger = logging.getLogger(__name__)
 TRAJECTORY_WINDOW_SECONDS = WINDOW_SECONDS
@@ -66,27 +76,56 @@ def evaluate_locations(
     point_limit_exceeded: bool = False,
 ) -> TrajectoryAttentionResponse:
     points = _points_from_locations(locations)
-    window = latest_window(points)
-    window_points = window.points
-    quality = assess_quality(
-        window_points,
+    windows = list(
+        sliding_windows(
+            points,
+            window_seconds=WINDOW_SECONDS,
+            step_seconds=WINDOW_STEP_SECONDS,
+        )
+    )
+    required_history, _ = POLICY_REQUIREMENTS[SELECTED_TEMPORAL_POLICY]
+    if not windows:
+        latest = latest_window(points)
+        quality = assess_quality(
+            latest.points,
+            point_limit_exceeded=(
+                point_limit_exceeded or len(latest.points) > MAX_TRAJECTORY_POINTS
+            ),
+        )
+        if not latest.complete:
+            reasons = tuple(dict.fromkeys((*quality.reason_codes, "INCOMPLETE_WINDOW")))
+            quality = replace(quality, valid=False, reason_codes=reasons)
+        return unknown_result(quality.reason_codes, point_count=len(latest.points))
+
+    recent_windows = windows[-required_history:]
+    latest_points = recent_windows[-1].points
+    latest_quality = assess_quality(
+        latest_points,
         point_limit_exceeded=(
-            point_limit_exceeded or len(window_points) > MAX_TRAJECTORY_POINTS
+            point_limit_exceeded or len(latest_points) > MAX_TRAJECTORY_POINTS
         ),
     )
-    if not window.complete:
-        reasons = tuple(dict.fromkeys((*quality.reason_codes, "INCOMPLETE_WINDOW")))
-        quality = replace(quality, valid=False, reason_codes=reasons)
-    if not quality.valid:
-        return unknown_result(quality.reason_codes, point_count=len(window_points))
+    if not latest_quality.valid:
+        return unknown_result(
+            latest_quality.reason_codes,
+            point_count=len(latest_points),
+        )
+    if len(recent_windows) < required_history:
+        return unknown_result(
+            ("TEMPORAL_HISTORY_INSUFFICIENT",),
+            point_count=len(latest_points),
+        )
 
     try:
         bundle = _cached_model_bundle()
-        prediction = infer_trajectory(
-            window_points,
-            bundle,
-            point_limit_exceeded=(len(window_points) > MAX_TRAJECTORY_POINTS),
-        )
+        predictions = [
+            infer_trajectory(
+                window.points,
+                bundle,
+                point_limit_exceeded=(len(window.points) > MAX_TRAJECTORY_POINTS),
+            )
+            for window in recent_windows
+        ]
     except TrajectoryModelError as error:
         logger.warning(
             "trajectory_anomaly_model_unavailable error_type=%s",
@@ -94,20 +133,57 @@ def evaluate_locations(
         )
         return unknown_result(
             ("MODEL_UNAVAILABLE",),
-            point_count=len(window_points),
+            point_count=len(latest_points),
         )
     except FeatureExtractionError:
         return unknown_result(
             ("FEATURE_EXTRACTION_FAILED",),
-            point_count=len(window_points),
+            point_count=len(latest_points),
             model_version=str(bundle.metadata.get("model_version", "v2")),
         )
+    latest_prediction = predictions[-1]
+    if latest_prediction.status == TrajectoryAttentionStatus.UNKNOWN:
+        return unknown_result(
+            latest_prediction.reason_codes,
+            point_count=len(latest_points),
+            model_version=latest_prediction.model_version,
+        )
+    window_alerts = [
+        True
+        if prediction.status == TrajectoryAttentionStatus.ATTENTION
+        else False
+        if prediction.status == TrajectoryAttentionStatus.NORMAL
+        else None
+        for prediction in predictions
+    ]
+    product_decision = apply_temporal_policy(
+        window_alerts,
+        SELECTED_TEMPORAL_POLICY,
+    )[-1]
+    if product_decision is None:
+        return unknown_result(
+            ("TEMPORAL_HISTORY_INSUFFICIENT",),
+            point_count=len(latest_points),
+            model_version=latest_prediction.model_version,
+        )
+    reason_codes = tuple(
+        dict.fromkeys(
+            reason
+            for prediction in predictions
+            if prediction.status == TrajectoryAttentionStatus.ATTENTION
+            for reason in prediction.reason_codes
+        )
+    ) if product_decision else ()
     return TrajectoryAttentionResponse(
-        status=TrajectoryAttentionStatus(prediction.status.value),
-        score=prediction.score,
-        reason_codes=list(prediction.reason_codes),
-        model_version=prediction.model_version,
-        point_count=len(window_points),
+        status=(
+            TrajectoryAttentionStatus.ATTENTION
+            if product_decision
+            else TrajectoryAttentionStatus.NORMAL
+        ),
+        score=latest_prediction.score,
+        reason_codes=list(reason_codes),
+        model_version=latest_prediction.model_version,
+        point_count=len(latest_points),
     )
 
 

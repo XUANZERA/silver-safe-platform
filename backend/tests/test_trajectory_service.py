@@ -1,3 +1,4 @@
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +17,15 @@ from app.services import trajectory_anomaly as service
 class StubModel:
     def decision_function(self, matrix):
         return [-0.5] * len(matrix)
+
+
+class SequenceModel:
+    def __init__(self, decisions):
+        self.decisions = iter(decisions)
+
+    def decision_function(self, matrix):
+        decision = next(self.decisions)
+        return [decision] * len(matrix)
 
 
 def location_objects(points):
@@ -59,6 +69,57 @@ def test_valid_input_gets_scored_and_model_is_loaded_once(monkeypatch) -> None:
     assert first.model_version == "test-v2"
     assert second.status == first.status
     assert calls == 1
+
+
+def test_product_attention_requires_temporal_history(monkeypatch) -> None:
+    trip = generate_trip("normal_walk", seed=20261011, trajectory_id="service-warmup")
+    history_end = trip.points[0].timestamp + timedelta(seconds=WINDOW_SECONDS + 60)
+    short_history = [point for point in trip.points if point.timestamp <= history_end]
+    monkeypatch.setattr(
+        service,
+        "load_artifact",
+        lambda: ModelBundle(
+            model=StubModel(),
+            metadata={
+                "threshold": 0.1,
+                "model_version": "test-v2",
+                "window_seconds": WINDOW_SECONDS,
+            },
+        ),
+    )
+    service.clear_cached_model_for_tests()
+    try:
+        result = service.evaluate_locations(location_objects(short_history))
+    finally:
+        service.clear_cached_model_for_tests()
+
+    assert result.status == TrajectoryAttentionStatus.UNKNOWN
+    assert result.score is None
+    assert result.reason_codes == ["TEMPORAL_HISTORY_INSUFFICIENT"]
+
+
+def test_temporal_attention_aggregates_scores_after_if_inference(monkeypatch) -> None:
+    trip = generate_trip("normal_walk", seed=20261012, trajectory_id="service-two-of-three")
+    monkeypatch.setattr(
+        service,
+        "load_artifact",
+        lambda: ModelBundle(
+            model=SequenceModel([-0.5, 0.0, -0.5]),
+            metadata={
+                "threshold": 0.1,
+                "model_version": "test-v2",
+                "window_seconds": WINDOW_SECONDS,
+            },
+        ),
+    )
+    service.clear_cached_model_for_tests()
+    try:
+        result = service.evaluate_locations(location_objects(trip.points))
+    finally:
+        service.clear_cached_model_for_tests()
+
+    assert result.status == TrajectoryAttentionStatus.ATTENTION
+    assert result.score == 0.5
 
 
 def test_missing_artifact_returns_unknown_without_breaking_service(monkeypatch) -> None:

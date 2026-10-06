@@ -31,6 +31,12 @@ from app.ml.trajectory_anomaly.windows import (
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 SPLIT_SEED = 42
 MIN_EVENT_EVIDENCE_SECONDS = {"long_stop": 300.0}
+BEHAVIORAL_SCENARIOS = (
+    "long_stop",
+    "repeated_backtracking",
+    "circular_wandering",
+    "abnormal_speed_pattern",
+)
 
 
 @dataclass(frozen=True)
@@ -99,7 +105,7 @@ def prepare_dataset(
         ):
             continue
         if selection_only and trip.scenario not in (
-            NORMAL_SCENARIOS + ("long_stop", "repeated_backtracking")
+            NORMAL_SCENARIOS + BEHAVIORAL_SCENARIOS
         ):
             continue
         windows = list(

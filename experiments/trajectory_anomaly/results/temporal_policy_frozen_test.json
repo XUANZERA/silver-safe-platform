@@ -1,0 +1,111 @@
+{
+  "artifact_sha256": "5dc3fe00964c017c7ee75834243d64eb6fc72176f54e75cb7193ddd82a8ebf2f",
+  "behavioral_stress": {
+    "event_eligible_window_level_v2_detection_rate": 0.9069686411149825,
+    "pooled_temporal_v3_detection_delay_from_evidence": {
+      "detected_count": 197,
+      "median_seconds": 735.240937,
+      "p90_seconds": 751.588948
+    },
+    "pooled_v2_detection_delay_from_evidence": {
+      "detected_count": 197,
+      "median_seconds": 604.77496,
+      "p90_seconds": 612.09265
+    },
+    "scenarios": {
+      "abnormal_speed_pattern": {
+        "temporal_v3_detection_delay_from_evidence": {
+          "detected_count": 50,
+          "median_seconds": 737.7517574999999,
+          "p90_seconds": 747.440065
+        },
+        "temporal_v3_event_aware_detection_rate": 1.0,
+        "trajectory_count": 50,
+        "v2_detection_delay_from_evidence": {
+          "detected_count": 50,
+          "median_seconds": 606.2483685,
+          "p90_seconds": 610.272798
+        },
+        "v2_single_window_event_aware_detection_rate": 1.0
+      },
+      "circular_wandering": {
+        "temporal_v3_detection_delay_from_evidence": {
+          "detected_count": 47,
+          "median_seconds": 737.307649,
+          "p90_seconds": 751.588948
+        },
+        "temporal_v3_event_aware_detection_rate": 0.94,
+        "trajectory_count": 50,
+        "v2_detection_delay_from_evidence": {
+          "detected_count": 47,
+          "median_seconds": 606.808012,
+          "p90_seconds": 612.09265
+        },
+        "v2_single_window_event_aware_detection_rate": 0.94
+      },
+      "long_stop": {
+        "temporal_v3_detection_delay_from_evidence": {
+          "detected_count": 50,
+          "median_seconds": 45.464771999999996,
+          "p90_seconds": 113.607451
+        },
+        "temporal_v3_event_aware_detection_rate": 1.0,
+        "trajectory_count": 50,
+        "v2_detection_delay_from_evidence": {
+          "detected_count": 50,
+          "median_seconds": 34.484804499999996,
+          "p90_seconds": 65.572617
+        },
+        "v2_single_window_event_aware_detection_rate": 1.0
+      },
+      "repeated_backtracking": {
+        "temporal_v3_detection_delay_from_evidence": {
+          "detected_count": 50,
+          "median_seconds": 741.3169375,
+          "p90_seconds": 803.31721
+        },
+        "temporal_v3_event_aware_detection_rate": 1.0,
+        "trajectory_count": 50,
+        "v2_detection_delay_from_evidence": {
+          "detected_count": 50,
+          "median_seconds": 607.0802490000001,
+          "p90_seconds": 723.77588
+        },
+        "v2_single_window_event_aware_detection_rate": 1.0
+      }
+    }
+  },
+  "frozen_policy": "C_two_of_latest_three",
+  "holdout_evaluated_at_utc": "2026-10-06T13:39:30.649212+00:00",
+  "holdout_run_count": 1,
+  "method_notes": [
+    "No IF fitting, threshold changes, or candidate-policy selection occurred in this run.",
+    "All candidates were scored and selected before this final test/stress pass.",
+    "Window-level FPR is a property of unchanged V2 scores and is therefore the same for V2 and V3.",
+    "Temporal V3 changes product ATTENTION aggregation only; it does not add ML features.",
+    "Stress detection and delays are measured from scenario event-evidence availability."
+  ],
+  "model_version": "v2",
+  "test_normal": {
+    "temporal_v3": {
+      "alert_episode_count": 13,
+      "alerts_per_trajectory": 0.13,
+      "trajectory_alert_count": 12,
+      "trajectory_alert_rate": 0.12,
+      "trajectory_count": 100,
+      "window_count": 1641,
+      "window_level_fpr": 0.05362583790371724
+    },
+    "v2_single_window": {
+      "alert_episode_count": 21,
+      "alerts_per_trajectory": 0.21,
+      "trajectory_alert_count": 14,
+      "trajectory_alert_rate": 0.14,
+      "trajectory_count": 100,
+      "window_count": 1641,
+      "window_level_fpr": 0.05362583790371724
+    }
+  },
+  "threshold": 0.039828209747568066,
+  "window_seconds": 600
+}
