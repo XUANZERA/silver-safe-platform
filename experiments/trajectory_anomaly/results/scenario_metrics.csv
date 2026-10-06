@@ -1,0 +1,14 @@
+scenario,split,quality_valid_count,window_count,trajectory_count,quality_unknown_rate,rule_attention_rate,if_attention_rate_seed42,if_attention_rate_mean_5seeds,if_attention_rate_std_5seeds,if_any_window_trip_fpr_seed42,if_any_window_trip_fpr_mean_5seeds,if_any_window_detection_rate_seed42,if_window_detection_rate_seed42,if_post_event_window_detection_rate_seed42,if_window_detection_rate_mean_5seeds,if_any_window_detection_rate_mean_5seeds,if_post_event_window_detection_rate_mean_5seeds
+normal_walk,test_normal,330,330,20,0.0,0.0,0.021212121212121213,0.012121212121212121,0.006356417261637282,0.15,0.1,,,,,,
+slow_walk,test_normal,321,321,20,0.0,0.1557632398753894,0.009345794392523364,0.013707165109034266,0.006414722829275389,0.1,0.09,,,,,,
+walk_with_short_stop,test_normal,333,333,20,0.0,0.006006006006006006,0.0,0.0,0.0,0.0,0.0,,,,,,
+park_walk,test_normal,330,330,20,0.0,0.05757575757575758,0.0,0.0,0.0,0.0,0.0,,,,,,
+shopping_walk,test_normal,327,327,20,0.0,0.26605504587155965,0.2018348623853211,0.2140672782874618,0.01845027905687872,0.5,0.51,,,,,,
+long_stop,stress_test,826,,,0.0,0.5,1.0,1.0,0.0,,,1.0,0.5605326876513317,0.8638392857142857,0.5433414043583535,1.0,0.8629464285714287
+repeated_backtracking,stress_test,811,,,0.0,0.9297163995067818,1.0,1.0,0.0,,,1.0,0.8397040690505548,0.8397040690505548,0.8290998766954377,1.0,0.8290998766954377
+circular_wandering,stress_test,810,,,0.0,0.9777777777777777,0.9,0.8400000000000001,0.05059644256269407,,,0.9,0.8049382716049382,0.8049382716049382,0.7133333333333333,0.8400000000000001,0.7133333333333333
+abnormal_speed_pattern,stress_test,801,,,0.0,0.10112359550561797,1.0,1.0,0.0,,,1.0,1.0,1.0,1.0,1.0,1.0
+gps_jump,stress_test,824,,,0.0,0.014563106796116505,0.92,0.9279999999999999,0.03249615361854383,,,,0.35558252427184467,,0.35242718446601945,,
+gps_dropout,stress_test,453,,,0.318796992481203,0.0,0.12,,,,,,0.07947019867549669,,,,
+poor_accuracy,stress_test,0,,,1.0,,,,,,,,,,,,
+severe_timestamp_gap,stress_test,479,,,0.22741935483870968,0.010438413361169102,0.14,,,,,,0.06680584551148225,,,,

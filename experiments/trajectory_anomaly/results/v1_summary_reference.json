@@ -1,0 +1,199 @@
+{
+  "allowed_statuses": [
+    "NORMAL",
+    "ATTENTION",
+    "UNKNOWN"
+  ],
+  "behavioral_synthetic_stress_auprc_seed42": 0.990618636507417,
+  "behavioral_synthetic_stress_auroc_seed42": 0.9745250000000001,
+  "final_production_artifact_test": {
+    "model_version": "v1",
+    "synthetic_stress_scenarios": {
+      "abnormal_speed_pattern": {
+        "attention_rate_when_valid": 1.0,
+        "quality_unknown_rate": 0.0,
+        "quality_valid_count": 100,
+        "trajectory_count": 100
+      },
+      "circular_wandering": {
+        "attention_rate_when_valid": 0.95,
+        "quality_unknown_rate": 0.0,
+        "quality_valid_count": 100,
+        "trajectory_count": 100
+      },
+      "gps_dropout": {
+        "attention_rate_when_valid": null,
+        "quality_unknown_rate": 1.0,
+        "quality_valid_count": 0,
+        "trajectory_count": 100
+      },
+      "gps_jump": {
+        "attention_rate_when_valid": 0.62,
+        "quality_unknown_rate": 0.0,
+        "quality_valid_count": 100,
+        "trajectory_count": 100
+      },
+      "long_stop": {
+        "attention_rate_when_valid": 0.73,
+        "quality_unknown_rate": 0.0,
+        "quality_valid_count": 100,
+        "trajectory_count": 100
+      },
+      "poor_accuracy": {
+        "attention_rate_when_valid": null,
+        "quality_unknown_rate": 1.0,
+        "quality_valid_count": 0,
+        "trajectory_count": 100
+      },
+      "repeated_backtracking": {
+        "attention_rate_when_valid": 0.91,
+        "quality_unknown_rate": 0.0,
+        "quality_valid_count": 100,
+        "trajectory_count": 100
+      },
+      "severe_timestamp_gap": {
+        "attention_rate_when_valid": null,
+        "quality_unknown_rate": 1.0,
+        "quality_valid_count": 0,
+        "trajectory_count": 100
+      }
+    },
+    "test_normal_count": 100,
+    "test_normal_fpr": 0.03
+  },
+  "method_notes": [
+    "Only synthetic normal training trajectories are used for fitting.",
+    "Trajectory IDs are split 60/20/20 before feature fitting; each trip has one fixed-window vector.",
+    "Validation normal alone calibrates the score threshold; stress cases do not tune it.",
+    "No scaler is used because Isolation Forest partitions random feature dimensions.",
+    "AUROC/AUPRC indicate synthetic stress-test discrimination only, not real-world safety performance."
+  ],
+  "normal_false_positive_rate_seed42_test": 0.04,
+  "normal_false_positive_rate_seed42_validation": 0.05,
+  "normal_trip_split_counts": {
+    "test_normal": 100,
+    "train_normal": 300,
+    "validation_normal": 100
+  },
+  "seed_metrics": [
+    {
+      "abnormal_speed_pattern_detection_rate": 1.0,
+      "behavioral_stress_auprc": 0.990618636507417,
+      "behavioral_stress_auroc": 0.9745250000000001,
+      "circular_wandering_detection_rate": 0.84,
+      "gps_dropout_unknown_rate": 1.0,
+      "gps_jump_detection_rate_when_valid": 0.56,
+      "gps_jump_unknown_rate": 0.0,
+      "long_stop_detection_rate": 0.76,
+      "normal_walk_test_fpr": 0.0,
+      "park_walk_test_fpr": 0.0,
+      "poor_accuracy_unknown_rate": 1.0,
+      "repeated_backtracking_detection_rate": 0.78,
+      "seed": 42,
+      "severe_timestamp_gap_unknown_rate": 1.0,
+      "shopping_walk_test_fpr": 0.2,
+      "slow_walk_test_fpr": 0.0,
+      "test_normal_fpr": 0.04,
+      "test_normal_rule_fpr": 0.33,
+      "threshold": 0.04583213799891417,
+      "validation_normal_fpr": 0.05,
+      "walk_with_short_stop_test_fpr": 0.0
+    },
+    {
+      "abnormal_speed_pattern_detection_rate": 1.0,
+      "behavioral_stress_auprc": 0.9910265556121649,
+      "behavioral_stress_auroc": 0.9757750000000001,
+      "circular_wandering_detection_rate": 0.4,
+      "gps_dropout_unknown_rate": 1.0,
+      "gps_jump_detection_rate_when_valid": 0.64,
+      "gps_jump_unknown_rate": 0.0,
+      "long_stop_detection_rate": 0.73,
+      "normal_walk_test_fpr": 0.0,
+      "park_walk_test_fpr": 0.0,
+      "poor_accuracy_unknown_rate": 1.0,
+      "repeated_backtracking_detection_rate": 0.64,
+      "seed": 43,
+      "severe_timestamp_gap_unknown_rate": 1.0,
+      "shopping_walk_test_fpr": 0.15,
+      "slow_walk_test_fpr": 0.0,
+      "test_normal_fpr": 0.03,
+      "test_normal_rule_fpr": 0.33,
+      "threshold": 0.05782154082320923,
+      "validation_normal_fpr": 0.05,
+      "walk_with_short_stop_test_fpr": 0.0
+    },
+    {
+      "abnormal_speed_pattern_detection_rate": 1.0,
+      "behavioral_stress_auprc": 0.9896849969064379,
+      "behavioral_stress_auroc": 0.9712750000000001,
+      "circular_wandering_detection_rate": 0.54,
+      "gps_dropout_unknown_rate": 1.0,
+      "gps_jump_detection_rate_when_valid": 0.46,
+      "gps_jump_unknown_rate": 0.0,
+      "long_stop_detection_rate": 0.55,
+      "normal_walk_test_fpr": 0.0,
+      "park_walk_test_fpr": 0.0,
+      "poor_accuracy_unknown_rate": 1.0,
+      "repeated_backtracking_detection_rate": 0.75,
+      "seed": 44,
+      "severe_timestamp_gap_unknown_rate": 1.0,
+      "shopping_walk_test_fpr": 0.15,
+      "slow_walk_test_fpr": 0.0,
+      "test_normal_fpr": 0.03,
+      "test_normal_rule_fpr": 0.33,
+      "threshold": 0.052326283023225506,
+      "validation_normal_fpr": 0.05,
+      "walk_with_short_stop_test_fpr": 0.0
+    },
+    {
+      "abnormal_speed_pattern_detection_rate": 1.0,
+      "behavioral_stress_auprc": 0.9896396799422524,
+      "behavioral_stress_auroc": 0.9741,
+      "circular_wandering_detection_rate": 0.37,
+      "gps_dropout_unknown_rate": 1.0,
+      "gps_jump_detection_rate_when_valid": 0.44,
+      "gps_jump_unknown_rate": 0.0,
+      "long_stop_detection_rate": 0.74,
+      "normal_walk_test_fpr": 0.0,
+      "park_walk_test_fpr": 0.0,
+      "poor_accuracy_unknown_rate": 1.0,
+      "repeated_backtracking_detection_rate": 0.63,
+      "seed": 45,
+      "severe_timestamp_gap_unknown_rate": 1.0,
+      "shopping_walk_test_fpr": 0.15,
+      "slow_walk_test_fpr": 0.0,
+      "test_normal_fpr": 0.03,
+      "test_normal_rule_fpr": 0.33,
+      "threshold": 0.05306120584203411,
+      "validation_normal_fpr": 0.05,
+      "walk_with_short_stop_test_fpr": 0.0
+    },
+    {
+      "abnormal_speed_pattern_detection_rate": 1.0,
+      "behavioral_stress_auprc": 0.9909410081526226,
+      "behavioral_stress_auroc": 0.9753000000000001,
+      "circular_wandering_detection_rate": 0.53,
+      "gps_dropout_unknown_rate": 1.0,
+      "gps_jump_detection_rate_when_valid": 0.54,
+      "gps_jump_unknown_rate": 0.0,
+      "long_stop_detection_rate": 0.72,
+      "normal_walk_test_fpr": 0.0,
+      "park_walk_test_fpr": 0.0,
+      "poor_accuracy_unknown_rate": 1.0,
+      "repeated_backtracking_detection_rate": 0.68,
+      "seed": 46,
+      "severe_timestamp_gap_unknown_rate": 1.0,
+      "shopping_walk_test_fpr": 0.15,
+      "slow_walk_test_fpr": 0.0,
+      "test_normal_fpr": 0.03,
+      "test_normal_rule_fpr": 0.33,
+      "threshold": 0.05541101340418253,
+      "validation_normal_fpr": 0.05,
+      "walk_with_short_stop_test_fpr": 0.0
+    }
+  ],
+  "stress_trip_count": 800,
+  "target_validation_fpr": 0.05,
+  "task": "fixed-window statistical trajectory anomaly detection",
+  "validation_threshold_seed42": 0.04583213799891417
+}

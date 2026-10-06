@@ -1,0 +1,303 @@
+{
+  "artifact_sha256": "5dc3fe00964c017c7ee75834243d64eb6fc72176f54e75cb7193ddd82a8ebf2f",
+  "behavioral_scenarios": [
+    "long_stop",
+    "repeated_backtracking",
+    "circular_wandering",
+    "abnormal_speed_pattern"
+  ],
+  "candidate_results": {
+    "A_single_window": {
+      "development_behavioral_anomaly": {
+        "detected_trajectory_count": 200,
+        "macro_trajectory_detection_rate": 1.0,
+        "median_detection_delay_seconds_from_evidence": 604.709022,
+        "p90_detection_delay_seconds_from_evidence": 613.263648,
+        "scenarios": {
+          "abnormal_speed_pattern": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 605.441187,
+            "p90_detection_delay_seconds_from_evidence": 609.876442,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "circular_wandering": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 606.261218,
+            "p90_detection_delay_seconds_from_evidence": 614.764879,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "long_stop": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 40.888225,
+            "p90_detection_delay_seconds_from_evidence": 60.583833,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "repeated_backtracking": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 608.890258,
+            "p90_detection_delay_seconds_from_evidence": 674.345562,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          }
+        }
+      },
+      "validation_normal": {
+        "alert_episode_count": 34,
+        "alerts_per_trajectory": 0.34,
+        "trajectory_count": 100,
+        "trajectory_level_alert_count": 20,
+        "trajectory_level_alert_rate": 0.2,
+        "window_count": 1632,
+        "window_level_fpr": 0.05514705882352941
+      }
+    },
+    "B_two_consecutive": {
+      "development_behavioral_anomaly": {
+        "detected_trajectory_count": 198,
+        "macro_trajectory_detection_rate": 0.99,
+        "median_detection_delay_seconds_from_evidence": 671.3847519999999,
+        "p90_detection_delay_seconds_from_evidence": 684.034949,
+        "scenarios": {
+          "abnormal_speed_pattern": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 671.8520659999999,
+            "p90_detection_delay_seconds_from_evidence": 680.942542,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "circular_wandering": {
+            "detected_trajectory_count": 48,
+            "median_detection_delay_seconds_from_evidence": 674.8376955,
+            "p90_detection_delay_seconds_from_evidence": 691.452198,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 0.96
+          },
+          "long_stop": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 44.994029999999995,
+            "p90_detection_delay_seconds_from_evidence": 122.177262,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "repeated_backtracking": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 677.0040369999999,
+            "p90_detection_delay_seconds_from_evidence": 795.411876,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          }
+        }
+      },
+      "validation_normal": {
+        "alert_episode_count": 19,
+        "alerts_per_trajectory": 0.19,
+        "trajectory_count": 100,
+        "trajectory_level_alert_count": 15,
+        "trajectory_level_alert_rate": 0.15,
+        "window_count": 1632,
+        "window_level_fpr": 0.05514705882352941
+      }
+    },
+    "C_two_of_latest_three": {
+      "development_behavioral_anomaly": {
+        "detected_trajectory_count": 199,
+        "macro_trajectory_detection_rate": 0.995,
+        "median_detection_delay_seconds_from_evidence": 735.981606,
+        "p90_detection_delay_seconds_from_evidence": 750.914416,
+        "scenarios": {
+          "abnormal_speed_pattern": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 736.4214549999999,
+            "p90_detection_delay_seconds_from_evidence": 750.272768,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "circular_wandering": {
+            "detected_trajectory_count": 49,
+            "median_detection_delay_seconds_from_evidence": 741.360816,
+            "p90_detection_delay_seconds_from_evidence": 752.545526,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 0.98
+          },
+          "long_stop": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 44.994029999999995,
+            "p90_detection_delay_seconds_from_evidence": 122.177262,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "repeated_backtracking": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 740.8066595,
+            "p90_detection_delay_seconds_from_evidence": 757.21877,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          }
+        }
+      },
+      "validation_normal": {
+        "alert_episode_count": 20,
+        "alerts_per_trajectory": 0.2,
+        "trajectory_count": 100,
+        "trajectory_level_alert_count": 15,
+        "trajectory_level_alert_rate": 0.15,
+        "window_count": 1632,
+        "window_level_fpr": 0.05514705882352941
+      }
+    },
+    "D_three_of_latest_five": {
+      "development_behavioral_anomaly": {
+        "detected_trajectory_count": 199,
+        "macro_trajectory_detection_rate": 0.995,
+        "median_detection_delay_seconds_from_evidence": 867.190018,
+        "p90_detection_delay_seconds_from_evidence": 887.14758,
+        "scenarios": {
+          "abnormal_speed_pattern": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 870.091156,
+            "p90_detection_delay_seconds_from_evidence": 887.14758,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "circular_wandering": {
+            "detected_trajectory_count": 49,
+            "median_detection_delay_seconds_from_evidence": 873.669683,
+            "p90_detection_delay_seconds_from_evidence": 890.075133,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 0.98
+          },
+          "long_stop": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 74.1874625,
+            "p90_detection_delay_seconds_from_evidence": 189.709569,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          },
+          "repeated_backtracking": {
+            "detected_trajectory_count": 50,
+            "median_detection_delay_seconds_from_evidence": 871.5832479999999,
+            "p90_detection_delay_seconds_from_evidence": 888.85121,
+            "trajectory_count": 50,
+            "trajectory_detection_rate": 1.0
+          }
+        }
+      },
+      "validation_normal": {
+        "alert_episode_count": 14,
+        "alerts_per_trajectory": 0.14,
+        "trajectory_count": 100,
+        "trajectory_level_alert_count": 13,
+        "trajectory_level_alert_rate": 0.13,
+        "window_count": 1632,
+        "window_level_fpr": 0.05514705882352941
+      }
+    }
+  },
+  "eligibility": {
+    "B_two_consecutive": {
+      "absolute_trajectory_alert_rate_reduction": 0.05000000000000002,
+      "alpha": 0.05,
+      "eligible": true,
+      "minimum_required_reduction": 0.05,
+      "paired_one_sided_exact_mcnemar_p": 0.03125
+    },
+    "C_two_of_latest_three": {
+      "absolute_trajectory_alert_rate_reduction": 0.05000000000000002,
+      "alpha": 0.05,
+      "eligible": true,
+      "minimum_required_reduction": 0.05,
+      "paired_one_sided_exact_mcnemar_p": 0.03125
+    },
+    "D_three_of_latest_five": {
+      "absolute_trajectory_alert_rate_reduction": 0.07,
+      "alpha": 0.05,
+      "eligible": true,
+      "minimum_required_reduction": 0.05,
+      "paired_one_sided_exact_mcnemar_p": 0.0078125
+    }
+  },
+  "excluded_before_freeze": [
+    "test_normal",
+    "stress_test"
+  ],
+  "frozen": true,
+  "protocol_sha256": "a388661fc9b57dc283aa0c004d0f930113ace2e7699b2a4d7806d8411b251537",
+  "scored_selection_splits": [
+    "validation_normal",
+    "development_anomaly"
+  ],
+  "selected_rule": "C_two_of_latest_three",
+  "selection_data_splits": [
+    "train_normal",
+    "validation_normal",
+    "development_anomaly"
+  ],
+  "selection_protocol": {
+    "candidates": [
+      {
+        "id": "A_single_window",
+        "rule": "current window is anomalous"
+      },
+      {
+        "id": "B_two_consecutive",
+        "rule": "current and immediately previous windows are anomalous"
+      },
+      {
+        "id": "C_two_of_latest_three",
+        "rule": "at least two anomalous states among the latest three windows"
+      },
+      {
+        "id": "D_three_of_latest_five",
+        "rule": "at least three anomalous states among the latest five windows"
+      }
+    ],
+    "data_controls": {
+      "allowed_selection_splits": [
+        "train_normal",
+        "validation_normal",
+        "development_anomaly"
+      ],
+      "holdout_splits_not_viewed_before_freeze": [
+        "test_normal",
+        "stress_test"
+      ],
+      "scored_selection_splits": [
+        "validation_normal",
+        "development_anomaly"
+      ]
+    },
+    "event_evidence_availability": {
+      "long_stop": "behavior onset plus 300 seconds of observed event time",
+      "other_behavioral_scenarios": "behavior onset"
+    },
+    "protocol_version": "temporal-policy-v1",
+    "selection_order": [
+      "among candidates passing the validation alert reduction gate, maximize unweighted macro-average trajectory detection across long_stop, repeated_backtracking, circular_wandering, abnormal_speed_pattern",
+      "if tied, minimize pooled median delay from event-evidence availability to first product ATTENTION",
+      "if still tied, choose the simplest rule: B before C before D"
+    ],
+    "temporal_semantics": {
+      "episode_count": "a new alert episode starts on each non-ATTENTION/UNKNOWN to ATTENTION transition",
+      "full_rule_history_required": true,
+      "sampling_cadence_seconds": 60,
+      "unknown_current_window": "UNKNOWN and no product ATTENTION",
+      "unknown_prior_window": "breaks consecutive evidence; counts as non-anomalous in voting rules"
+    },
+    "validation_alert_reduction_gate": {
+      "alpha": 0.05,
+      "minimum_absolute_trajectory_alert_rate_reduction": 0.05,
+      "paired_test": "one-sided exact McNemar against A"
+    },
+    "validation_normal_metrics": {
+      "alerts_per_trajectory": "product ATTENTION rising edges divided by validation trajectories",
+      "trajectory_level_alert_rate": "validation trajectories with at least one product ATTENTION decision divided by validation trajectories",
+      "window_level_fpr": "raw V2 anomalous windows divided by quality-valid validation windows; identical for all policies"
+    }
+  },
+  "selection_status": "frozen",
+  "window_seconds": 600,
+  "window_step_seconds": 60
+}

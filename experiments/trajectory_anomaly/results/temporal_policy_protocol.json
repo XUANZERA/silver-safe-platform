@@ -1,0 +1,62 @@
+{
+  "protocol_version": "temporal-policy-v1",
+  "candidates": [
+    {
+      "id": "A_single_window",
+      "rule": "current window is anomalous"
+    },
+    {
+      "id": "B_two_consecutive",
+      "rule": "current and immediately previous windows are anomalous"
+    },
+    {
+      "id": "C_two_of_latest_three",
+      "rule": "at least two anomalous states among the latest three windows"
+    },
+    {
+      "id": "D_three_of_latest_five",
+      "rule": "at least three anomalous states among the latest five windows"
+    }
+  ],
+  "validation_alert_reduction_gate": {
+    "minimum_absolute_trajectory_alert_rate_reduction": 0.05,
+    "paired_test": "one-sided exact McNemar against A",
+    "alpha": 0.05
+  },
+  "selection_order": [
+    "among candidates passing the validation alert reduction gate, maximize unweighted macro-average trajectory detection across long_stop, repeated_backtracking, circular_wandering, abnormal_speed_pattern",
+    "if tied, minimize pooled median delay from event-evidence availability to first product ATTENTION",
+    "if still tied, choose the simplest rule: B before C before D"
+  ],
+  "event_evidence_availability": {
+    "long_stop": "behavior onset plus 300 seconds of observed event time",
+    "other_behavioral_scenarios": "behavior onset"
+  },
+  "validation_normal_metrics": {
+    "window_level_fpr": "raw V2 anomalous windows divided by quality-valid validation windows; identical for all policies",
+    "trajectory_level_alert_rate": "validation trajectories with at least one product ATTENTION decision divided by validation trajectories",
+    "alerts_per_trajectory": "product ATTENTION rising edges divided by validation trajectories"
+  },
+  "temporal_semantics": {
+    "sampling_cadence_seconds": 60,
+    "full_rule_history_required": true,
+    "unknown_current_window": "UNKNOWN and no product ATTENTION",
+    "unknown_prior_window": "breaks consecutive evidence; counts as non-anomalous in voting rules",
+    "episode_count": "a new alert episode starts on each non-ATTENTION/UNKNOWN to ATTENTION transition"
+  },
+  "data_controls": {
+    "allowed_selection_splits": [
+      "train_normal",
+      "validation_normal",
+      "development_anomaly"
+    ],
+    "scored_selection_splits": [
+      "validation_normal",
+      "development_anomaly"
+    ],
+    "holdout_splits_not_viewed_before_freeze": [
+      "test_normal",
+      "stress_test"
+    ]
+  }
+}

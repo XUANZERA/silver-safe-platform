@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.schemas.alert import AlertResponse
 from app.schemas.location import LocationResponse
+from app.schemas.trajectory import TrajectoryAttentionResponse
 from app.schemas.trip import TripStatus
 
 
@@ -26,6 +27,7 @@ class SafetyViewResponse(BaseModel):
     trip_status: TripStatus | None
     location_health: LocationHealth
     risk_status: RiskStatus | None
+    trajectory_attention: TrajectoryAttentionResponse
     open_alert_count: int
     latest_location: LocationResponse | None
     latest_open_alert: AlertResponse | None

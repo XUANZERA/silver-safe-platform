@@ -1,0 +1,75 @@
+{
+  "candidate_results": [
+    {
+      "backtracking_development_sensitivity_per_trajectory": 1.0,
+      "development_trajectory_counts": {
+        "long_stop": 50,
+        "repeated_backtracking": 50
+      },
+      "development_trips_with_any_attention": 100,
+      "long_stop_development_sensitivity_per_trajectory": 1.0,
+      "median_observed_event_onset_to_attention_seconds": 511.775979,
+      "minimum_decision_latency_seconds": 600,
+      "minimum_event_evidence_seconds": {
+        "long_stop": 300.0,
+        "repeated_backtracking": 0.0
+      },
+      "minimum_observed_event_onset_to_attention_seconds": 300.102026,
+      "threshold": 0.039828209747568066,
+      "train_normal_window_count": 4921,
+      "validation_normal_any_window_trip_fpr": 0.17,
+      "validation_normal_fpr": 0.04963235294117647,
+      "validation_normal_trajectory_count": 100,
+      "validation_normal_window_count": 1632,
+      "window_minutes": 10.0,
+      "window_seconds": 600
+    },
+    {
+      "backtracking_development_sensitivity_per_trajectory": 1.0,
+      "development_trajectory_counts": {
+        "long_stop": 50,
+        "repeated_backtracking": 50
+      },
+      "development_trips_with_any_attention": 95,
+      "long_stop_development_sensitivity_per_trajectory": 0.9,
+      "median_observed_event_onset_to_attention_seconds": 900.460039,
+      "minimum_decision_latency_seconds": 900,
+      "minimum_event_evidence_seconds": {
+        "long_stop": 300.0,
+        "repeated_backtracking": 0.0
+      },
+      "minimum_observed_event_onset_to_attention_seconds": 309.340092,
+      "threshold": 0.04826467934097345,
+      "train_normal_window_count": 3565,
+      "validation_normal_any_window_trip_fpr": 0.12,
+      "validation_normal_fpr": 0.0496215306980656,
+      "validation_normal_trajectory_count": 100,
+      "validation_normal_window_count": 1189,
+      "window_minutes": 15.0,
+      "window_seconds": 900
+    }
+  ],
+  "development_scenarios": [
+    "long_stop",
+    "repeated_backtracking"
+  ],
+  "excluded_data": [
+    "test_normal",
+    "stress_test"
+  ],
+  "latency_definition": "first ATTENTION window after onset; long-stop must have at least 300 seconds of observed event time",
+  "operational_tradeoff": "Any-window normal trajectory FPR is reported but is not separately calibrated; it captures repeated-window false-alert accumulation.",
+  "selected_window_seconds": 600,
+  "selection_data": [
+    "train_normal",
+    "validation_normal",
+    "development_anomaly"
+  ],
+  "selection_order": [
+    "validation-normal window FPR within +/-1 percentage point of target 5%",
+    "highest minimum of long-stop and backtracking trajectory sensitivity",
+    "highest mean of those two sensitivities",
+    "shortest minimum decision latency",
+    "closest validation-normal FPR to target as the final tie-break"
+  ]
+}
