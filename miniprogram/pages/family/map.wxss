@@ -3,6 +3,27 @@
   font-weight: 700;
 }
 
+.alert-card {
+  border-color: #fecdca;
+  border-left: 8rpx solid #d92d20;
+  background: #fff5f4;
+}
+
+.alert-heading,
+.alert-title {
+  color: #b42318;
+}
+
+.alert-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.alert-empty {
+  color: #667085;
+}
+
 .map-card {
   overflow: hidden;
   padding: 0;

@@ -68,6 +68,27 @@ test('API client calls the existing trip, location and safety routes', async () 
   ])
 })
 
+test('Family alerts helper uses the elder alerts path and stored Bearer token', async () => {
+  const calls = []
+  const storage = createStorage()
+  storage.setStorageSync(TOKEN_STORAGE_KEY, 'family-bearer-token')
+  const client = createApiClient({
+    baseUrl: 'https://api.example.com/api/v1/',
+    wxApi: {
+      request(options) {
+        calls.push(options)
+        options.success({ statusCode: 200, data: { data: [] } })
+      }
+    },
+    storage
+  })
+
+  assert.deepEqual(await client.getElderAlerts(1), [])
+  assert.equal(new URL(calls[0].url).pathname, '/api/v1/elders/1/alerts')
+  assert.equal(new URL(calls[0].url).pathname.slice('/api/v1'.length), '/elders/1/alerts')
+  assert.equal(calls[0].header.Authorization, 'Bearer family-bearer-token')
+})
+
 test('API client sends SOS to the backend with only trip_id and the existing Bearer token', async () => {
   const calls = []
   const storage = createStorage()

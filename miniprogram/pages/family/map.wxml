@@ -43,6 +43,24 @@
       </view>
     </view>
 
+    <view class="card alert-card" wx:if="{{alertLoadFailed}}">
+      <view class="section-title alert-heading">告警状态</view>
+      <view class="alert-title">告警状态暂时无法获取</view>
+    </view>
+    <view class="card alert-card" wx:elif="{{primaryAlert}}">
+      <view class="section-title alert-heading">当前告警</view>
+      <view class="alert-title">{{primaryAlert.title}}</view>
+      <view class="row">
+        <text class="row-label">状态</text>
+        <text class="row-value">{{primaryAlert.statusText}}</text>
+      </view>
+      <view class="row">
+        <text class="row-label">发生时间</text>
+        <text class="row-value">{{primaryAlert.occurred_at}}</text>
+      </view>
+    </view>
+    <view class="card muted alert-empty" wx:elif="{{alertsEmpty}}">暂无告警</view>
+
     <view class="card map-card" wx:if="{{hasLocation}}">
       <map
         class="map"

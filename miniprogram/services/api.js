@@ -154,6 +154,7 @@ function createApiClient({ baseUrl = '', wxApi = null, storage = null } = {}) {
     getMe: () => request('/auth/me'),
     listElders: () => request('/elders'),
     getCurrentTrip: (elderId) => request(`/elders/${elderId}/current-trip`),
+    getElderAlerts: (elderId) => request(`/elders/${elderId}/alerts`),
     uploadLocation: (tripId, payload) => request(`/trips/${tripId}/locations`, {
       method: 'POST',
       data: payload
@@ -192,6 +193,7 @@ module.exports = {
   hasAccessToken: () => apiClient.hasAccessToken(),
   getMe: () => apiClient.getMe(),
   listElders: () => apiClient.listElders(),
+  getElderAlerts: (elderId) => apiClient.getElderAlerts(elderId),
   getCurrentTrip: (elderId) => apiClient.getCurrentTrip(elderId),
   uploadLocation: (tripId, payload) => apiClient.uploadLocation(tripId, payload),
   requestSos: (tripId) => apiClient.requestSos(tripId),
