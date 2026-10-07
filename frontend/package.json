@@ -4,7 +4,9 @@
     "version": "0.0.0",
     "type": "module",
     "scripts": {
-        "dev": "vite",
+        "dev": "node scripts/start-vite.js demo",
+        "dev:real": "node scripts/start-vite.js real",
+        "dev:demo": "node scripts/start-vite.js demo",
         "build": "vite build",
         "test": "node --test",
         "preview": "vite preview"

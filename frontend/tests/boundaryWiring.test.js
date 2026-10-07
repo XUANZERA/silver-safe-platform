@@ -27,6 +27,25 @@ test('REAL demo-only routing delegates directly to the shared role-aware redirec
   assert.doesNotMatch(router, /demoOnly\s*&&\s*isApiConfigured\(\)\) return '\/elder'/)
 })
 
+test('REAL family view uses backend Safety View and excludes its Demo family fixture', () => {
+  const childHome = source('../src/views/child/ChildHome.vue')
+  assert.match(childHome, /const realMode = isApiConfigured\(\)/)
+  assert.match(childHome, /const elderList = await elderApi\.list\(\)/)
+  assert.match(childHome, /elderApi\.safety\(currentElder\.id\)/)
+  assert.match(childHome, /stateAvailable\.value = false/)
+  assert.doesNotMatch(childHome, /from ['"].*mock\//)
+})
+
+test('REAL SOS uses the backend alert endpoint and its failures stay in the error path', () => {
+  const elderHome = source('../src/views/elder/ElderHome.vue')
+  const api = source('../src/services/api.js')
+  assert.match(elderHome, /submit:\s*\(\) => alertApi\.sos\(currentTripId\.value\)/)
+  assert.match(elderHome, /catch \(error\) \{[\s\S]*sosResult\.value = presentSosFailure\(error\)/)
+  assert.match(api, /sos:\s*\(tripId\) => request\('\/alerts\/sos', \{ method: 'POST', body: JSON\.stringify\(\{ trip_id: tripId \}\) \}\)/)
+  assert.match(api, /const API_BASE = resolveApiBaseUrl\(import\.meta\.env\?\.VITE_API_BASE_URL \|\| ''\)/)
+  assert.match(api, /isApiConfigured = \(\) => Boolean\(API_BASE\)/)
+})
+
 test('REAL Trip create/start UI is wired to authoritative refresh without POST response truth', () => {
   const elderHome = source('../src/views/elder/ElderHome.vue')
   assert.match(elderHome, /async function loadCurrentTrip\(\)/)
