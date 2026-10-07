@@ -1,0 +1,28 @@
+# Silver Safe Platform - Caddy 2 Reverse Proxy Configuration
+# 环境变量 DOMAIN 可在启动时指定，默认为 silver-test.example.com
+{$DOMAIN:silver-test.example.com} {
+    # 强制启用严格安全响应头与 HSTS (TLS 1.2/1.3)
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+    }
+
+    # 反向代理至本地回环接口 Uvicorn 后端 (127.0.0.1:8000)
+    reverse_proxy 127.0.0.1:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto https
+    }
+
+    # 访问日志轮转
+    log {
+        output file /var/log/caddy/silver_safe_access.log {
+            roll_size 10mb
+            roll_keep 10
+        }
+    }
+}
+

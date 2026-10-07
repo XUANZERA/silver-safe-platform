@@ -68,6 +68,55 @@ test('API client calls the existing trip, location and safety routes', async () 
   ])
 })
 
+test('API client sends SOS to the backend with only trip_id and the existing Bearer token', async () => {
+  const calls = []
+  const storage = createStorage()
+  storage.setStorageSync(TOKEN_STORAGE_KEY, 'saved-elder-token')
+  const client = createApiClient({
+    baseUrl: 'https://api.example.com/api/v1/',
+    storage,
+    wxApi: {
+      request(options) {
+        calls.push(options)
+        options.success({
+          statusCode: 201,
+          data: { success: true, data: { id: 18, trip_id: 42, type: 'emergency' } }
+        })
+      }
+    }
+  })
+
+  const result = await client.requestSos(42)
+
+  assert.deepEqual(result, { id: 18, trip_id: 42, type: 'emergency' })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'https://api.example.com/api/v1/alerts/sos')
+  assert.equal(calls[0].method, 'POST')
+  assert.deepEqual(calls[0].data, { trip_id: 42 })
+  assert.deepEqual(Object.keys(calls[0].data), ['trip_id'])
+  assert.equal(calls[0].header.Authorization, 'Bearer saved-elder-token')
+})
+
+test('SOS API helper rejects responses that cannot confirm an Alert was created or returned', async () => {
+  const malformedResponses = [
+    { statusCode: 201, data: { data: { id: 18, trip_id: 42, type: 'emergency' } } },
+    { statusCode: 201, data: { success: true, data: { id: 18, trip_id: 42, type: 'geofence_exit' } } },
+    { statusCode: 200, data: { success: true, data: { id: 18, trip_id: 99, type: 'emergency' } } }
+  ]
+
+  for (const response of malformedResponses) {
+    const client = createApiClient({
+      baseUrl: 'https://api.example.com/api/v1',
+      wxApi: { request(options) { options.success(response) } }
+    })
+    await assert.rejects(client.requestSos(42), (error) => {
+      assert.equal(error instanceof ApiError, true)
+      assert.match(error.code, /^INVALID_/)
+      return true
+    })
+  }
+})
+
 test('API errors preserve Backend status and error code', async () => {
   const client = createApiClient({
     baseUrl: 'https://api.example.com/api/v1',

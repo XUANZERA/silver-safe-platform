@@ -21,3 +21,21 @@
   color: #b42318;
 }
 
+.sos-card {
+  border-color: #fecdca;
+}
+
+.sos-help {
+  margin-bottom: 20rpx;
+  line-height: 1.5;
+}
+
+.sos-button {
+  background: #c62828;
+  color: #fff;
+  font-weight: 700;
+}
+
+.sos-error {
+  margin-top: 16rpx;
+}

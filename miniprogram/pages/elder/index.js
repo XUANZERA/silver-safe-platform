@@ -30,12 +30,15 @@ Page({
     user: null,
     loggingIn: false,
     loadingTrip: false,
+    sosPending: false,
+    sosSending: false,
     currentTrip: null,
     tripStatusText: '',
     hasActiveTrip: false,
     locationStatus: LOCATION_STATUS.IDLE,
     locationStatusText: STATUS_TEXT[LOCATION_STATUS.IDLE],
     guardRunning: false,
+    sosFeedbackText: '',
     errorText: ''
   },
 
@@ -170,6 +173,57 @@ Page({
       if (error?.status === 401) this.setData({ loggedIn: false, user: null })
     } finally {
       this.setData({ loadingTrip: false })
+    }
+  },
+
+  async handleSos() {
+    if (this.sosPending) return
+    this.sosPending = true
+    this.setData({ sosPending: true, sosFeedbackText: '' })
+
+    try {
+      const trip = this.data.currentTrip
+      if (!trip || trip.status !== 'active') {
+        this.setData({ sosFeedbackText: '当前没有进行中的行程，无法发送行程紧急求助。' })
+        return
+      }
+
+      let confirmed = false
+      try {
+        confirmed = await new Promise((resolve, reject) => {
+          wx.showModal({
+            title: '确认发送紧急求助？',
+            content: '系统将向家属/平台发送当前行程的紧急求助信息。',
+            cancelText: '取消',
+            confirmText: '确认求助',
+            confirmColor: '#c62828',
+            success: (result) => resolve(Boolean(result?.confirm)),
+            fail: reject
+          })
+        })
+      } catch {
+        this.setData({ sosFeedbackText: '无法打开确认窗口，请稍后重试。' })
+        return
+      }
+
+      if (!confirmed) return
+
+      this.setData({ sosSending: true })
+      await api.requestSos(trip.id)
+      wx.showToast({ title: '紧急求助已发送', icon: 'success' })
+    } catch (error) {
+      if (error?.code === 'NO_ACTIVE_TRIP') {
+        await this.loadCurrentTrip()
+        this.setData({ sosFeedbackText: '当前没有进行中的行程，无法发送行程紧急求助。' })
+      } else if (error?.code === 'TRIP_NOT_FOUND') {
+        await this.loadCurrentTrip()
+        this.setData({ sosFeedbackText: '当前行程已不可用，请刷新行程后重试。' })
+      } else {
+        this.setData({ sosFeedbackText: '发送失败或状态未知，请重试或直接联系家人。' })
+      }
+    } finally {
+      this.sosPending = false
+      this.setData({ sosPending: false, sosSending: false })
     }
   },
 

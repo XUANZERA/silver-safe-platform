@@ -1,0 +1,32 @@
+[Unit]
+Description=Silver Safe Platform FastAPI Backend (Volunteer Testing)
+After=network.target
+
+[Service]
+Type=simple
+User=silver-safe
+Group=silver-safe
+WorkingDirectory=/opt/silver-safe/app
+EnvironmentFile=/etc/silver-safe/testing.env
+
+# 单 Worker Uvicorn 进程，配合 SQLite WAL 模式保证事务原子性与无锁竞争
+ExecStart=/opt/silver-safe/app/venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1 \
+    --access-log \
+    --proxy-headers
+
+Restart=always
+RestartSec=5s
+KillMode=process
+
+# Linux 安全沙箱硬化隔离
+ProtectSystem=strict
+ReadWritePaths=/var/lib/silver-safe /var/log/silver-safe
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+

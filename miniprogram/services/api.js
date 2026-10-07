@@ -68,7 +68,13 @@ function createApiClient({ baseUrl = '', wxApi = null, storage = null } = {}) {
     return Boolean(accessToken)
   }
 
-  function request(path, { method = 'GET', data, header = {}, authenticated = true } = {}) {
+  function request(path, {
+    method = 'GET',
+    data,
+    header = {},
+    authenticated = true,
+    requireSuccessEnvelope = false
+  } = {}) {
     const wxRuntime = resolveWxApi()
     if (!configuredBaseUrl) {
       return Promise.reject(new ApiError('未配置 Backend API 地址', { code: 'API_DISABLED' }))
@@ -96,6 +102,13 @@ function createApiClient({ baseUrl = '', wxApi = null, storage = null } = {}) {
           const payload = response?.data || {}
           if (status >= 200 && status < 300) {
             const hasData = Object.prototype.hasOwnProperty.call(payload, 'data')
+            if (requireSuccessEnvelope && (payload?.success !== true || !hasData)) {
+              reject(new ApiError('Backend 响应无法确认', {
+                status: Number.isFinite(status) ? status : null,
+                code: 'INVALID_RESPONSE'
+              }))
+              return
+            }
             resolve(hasData ? payload.data : payload)
             return
           }
@@ -145,6 +158,24 @@ function createApiClient({ baseUrl = '', wxApi = null, storage = null } = {}) {
       method: 'POST',
       data: payload
     }),
+    requestSos: async (tripId) => {
+      const alert = await request('/alerts/sos', {
+        method: 'POST',
+        data: { trip_id: tripId },
+        requireSuccessEnvelope: true
+      })
+      if (
+        !alert ||
+        typeof alert !== 'object' ||
+        !Number.isInteger(alert.id) ||
+        alert.id <= 0 ||
+        alert.trip_id !== tripId ||
+        alert.type !== 'emergency'
+      ) {
+        throw new ApiError('Backend SOS 响应无法确认', { code: 'INVALID_SOS_RESPONSE' })
+      }
+      return alert
+    },
     getSafetyView: (elderId) => request(`/elders/${elderId}/safety`)
   }
 }
@@ -163,5 +194,6 @@ module.exports = {
   listElders: () => apiClient.listElders(),
   getCurrentTrip: (elderId) => apiClient.getCurrentTrip(elderId),
   uploadLocation: (tripId, payload) => apiClient.uploadLocation(tripId, payload),
+  requestSos: (tripId) => apiClient.requestSos(tripId),
   getSafetyView: (elderId) => apiClient.getSafetyView(elderId)
 }

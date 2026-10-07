@@ -46,6 +46,15 @@
       <view class="muted" wx:else>今天暂时没有出行任务。</view>
     </view>
 
+    <view class="card sos-card">
+      <view class="section-title">紧急求助</view>
+      <view class="muted sos-help">仅用于当前进行中的行程。发送前会再次确认。</view>
+      <button class="sos-button" loading="{{sosSending}}" disabled="{{sosPending}}" bindtap="handleSos">
+        {{sosSending ? '发送中...' : '紧急求助 SOS'}}
+      </button>
+      <view class="error sos-error" wx:if="{{sosFeedbackText}}">{{sosFeedbackText}}</view>
+    </view>
+
     <view class="card">
       <view class="section-title">定位状态</view>
       <view class="status status-{{locationStatus}}">{{locationStatusText}}</view>
