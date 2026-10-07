@@ -2,8 +2,7 @@
 
 const API_BASE_URL = Object.freeze({
   development: 'http://127.0.0.1:8000/api/v1',
-  // 发布志愿者体验版前，将域名替换为已加入微信 request 合法域名的 HTTPS 地址。
-  testing: 'https://test-domain/api/v1'
+  testing: 'https://api.silver-safe.top/api/v1'
 })
 
 const ENVIRONMENT_BY_VERSION = Object.freeze({
@@ -23,6 +22,15 @@ function resolveEnvironment(wxApi) {
 
 function resolveConfig(wxApi) {
   const environment = resolveEnvironment(wxApi)
+
+  console.log(
+    '[SilverSafe Config]',
+    'env=',
+    environment,
+    'url=',
+    API_BASE_URL[environment]
+  )
+
   return Object.freeze({
     environment,
     apiBaseUrl: API_BASE_URL[environment],
