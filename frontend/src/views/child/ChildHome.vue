@@ -17,6 +17,7 @@ import {
   validateCanonicalTrack
 } from '../../services/map/mapLocationMapper'
 import { loadDemoItinerary, realDestinationOrPlaceholder } from '../../services/modeBoundary'
+import { loadFamilyDashboard } from '../../services/familyDashboard'
 import { nextFamilyAttentionState } from '../../services/modePresentation'
 import { createPollingController, normalizePollingInterval } from '../../services/polling'
 import {
@@ -33,7 +34,7 @@ const activeAlert = ref(false)
 const stateAvailable = ref(!realMode)
 const stateLoading = ref(false)
 const stateError = ref('')
-const alertSyncState = ref(realMode ? 'loading' : 'ready')
+const alertsLoadFailed = ref(realMode)
 const safetyView = ref(null)
 const geofence = ref(null)
 const geofenceRadiusDraft = ref(100)
@@ -71,7 +72,7 @@ const familyAlert = computed(() => selectFamilyAlert(
 const riskPresentation = computed(() => presentRisk(safetyView.value, stateAvailable.value))
 const alertPresentation = computed(() => presentAlertWorkflow(
   familyAlert.value,
-  stateAvailable.value && alertSyncState.value === 'ready'
+  stateAvailable.value && !alertsLoadFailed.value
 ))
 const geofenceStatus = computed(() => {
   if (!stateAvailable.value) return '状态不可用'
@@ -114,23 +115,16 @@ async function loadAuthoritativeState(syncGeofenceDraft = false) {
   const loadGen = ++currentLoadGeneration
   stateLoading.value = true
   try {
-    const elderList = await elderApi.list()
-    if (loadGen !== currentLoadGeneration) return false
+    const snapshot = await loadFamilyDashboard(elderApi, {
+      isCurrent: () => loadGen === currentLoadGeneration
+    })
+    if (snapshot.stale || loadGen !== currentLoadGeneration) return false
 
-    const currentElder = elderList?.items?.[0]
-    if (!currentElder) throw new Error('没有可查看的老人资料')
+    const currentElder = snapshot.currentElder
     const elderChanged = elder.id !== null && elder.id !== currentElder.id
-    const alertRequest = elderApi.alerts(currentElder.id).then(
-      (alertList) => ({ ok: true, alertList }),
-      (error) => ({ ok: false, error })
-    )
-    const [view, alertResult, trip, configuredGeofence] = await Promise.all([
-      elderApi.safety(currentElder.id),
-      alertRequest,
-      elderApi.currentTrip(currentElder.id),
-      elderApi.geofence(currentElder.id)
-    ])
-    if (loadGen !== currentLoadGeneration) return false
+    const view = snapshot.safetyView
+    const trip = snapshot.trip
+    const configuredGeofence = snapshot.geofence
     if (!view) throw new Error('后端未返回安全状态')
 
     if (elderChanged) {
@@ -158,12 +152,12 @@ async function loadAuthoritativeState(syncGeofenceDraft = false) {
       geofenceEnabledDraft.value = configuredGeofence?.enabled ?? true
       geofenceDraftDirty.value = false
     }
-    if (alertResult.ok) {
-      alerts.value = alertResult.alertList?.items || []
-      alertSyncState.value = 'ready'
+    if (snapshot.alertsLoadFailed) {
+      alertsLoadFailed.value = true
+      console.warn('家属端告警状态同步失败', snapshot.alertError)
     } else {
-      alertSyncState.value = 'error'
-      console.warn('家属端告警状态同步失败', alertResult.error)
+      alerts.value = snapshot.alerts
+      alertsLoadFailed.value = false
     }
     stateAvailable.value = true
     stateError.value = ''

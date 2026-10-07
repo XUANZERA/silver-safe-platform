@@ -29,9 +29,12 @@ test('REAL demo-only routing delegates directly to the shared role-aware redirec
 
 test('REAL family view uses backend Safety View and excludes its Demo family fixture', () => {
   const childHome = source('../src/views/child/ChildHome.vue')
+  const familyDashboard = source('../src/services/familyDashboard.js')
   assert.match(childHome, /const realMode = isApiConfigured\(\)/)
-  assert.match(childHome, /const elderList = await elderApi\.list\(\)/)
-  assert.match(childHome, /elderApi\.safety\(currentElder\.id\)/)
+  assert.match(childHome, /loadFamilyDashboard\(elderApi/)
+  assert.match(familyDashboard, /const elderList = await elderApi\.list\(\)/)
+  assert.match(familyDashboard, /elderApi\.safety\(currentElder\.id\)/)
+  assert.match(familyDashboard, /elderApi\.alerts\(currentElder\.id\)/)
   assert.match(childHome, /stateAvailable\.value = false/)
   assert.doesNotMatch(childHome, /from ['"].*mock\//)
 })

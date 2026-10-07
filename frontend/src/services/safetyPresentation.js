@@ -90,7 +90,13 @@ export function presentAlertWorkflow(alert, available = true) {
 
 export function selectFamilyAlert(safetyAlert, alertItems) {
   const openAlerts = Array.isArray(alertItems)
-    ? alertItems.filter((item) => OPEN_ALERT_STATUSES.has(item?.status))
+    ? alertItems
+      .filter((item) => OPEN_ALERT_STATUSES.has(item?.status))
+      .sort((left, right) => {
+        const timeDifference = new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime()
+        if (Number.isFinite(timeDifference) && timeDifference !== 0) return timeDifference
+        return Number(right.id || 0) - Number(left.id || 0)
+      })
     : []
   const emergencyAlert = openAlerts.find((item) => item.type === 'emergency')
   if (emergencyAlert) return emergencyAlert

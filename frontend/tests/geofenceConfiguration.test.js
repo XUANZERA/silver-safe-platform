@@ -161,9 +161,11 @@ test('DEMO geofence action never calls backend callbacks', async () => {
   assert.equal(calls, 0)
 
   const childHome = source('../src/views/child/ChildHome.vue')
+  const familyDashboard = source('../src/services/familyDashboard.js')
   assert.match(childHome, /if \(!realMode \|\| !elder\.id\) return/)
   assert.match(childHome, /<section v-if="realMode" class="geofence-settings">/)
-  assert.match(childHome, /elderApi\.geofence\(currentElder\.id\)/)
+  assert.match(childHome, /loadFamilyDashboard\(elderApi/)
+  assert.match(familyDashboard, /elderApi\.geofence\(currentElder\.id\)/)
 })
 
 test('REAL and DEMO geofence modes remain isolated', async () => {

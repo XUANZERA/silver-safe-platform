@@ -445,10 +445,13 @@ test('MAP-015 track order preserved, if track implemented', async () => {
 // ============================================================================
 test('MAP-016 Family authorization/backend endpoint remains authoritative', () => {
   const childHomeSource = source('../src/views/child/ChildHome.vue')
+  const familyDashboardSource = source('../src/services/familyDashboard.js')
   // Verify Family fetches state strictly from authorized backend APIs:
-  assert.match(childHomeSource, /elderApi\.safety\(currentElder\.id\)/)
-  assert.match(childHomeSource, /elderApi\.alerts\(currentElder\.id\)/)
-  assert.match(childHomeSource, /elderApi\.currentTrip\(currentElder\.id\)/)
+  assert.match(childHomeSource, /loadFamilyDashboard\(elderApi/)
+  assert.match(familyDashboardSource, /elderApi\.safety\(currentElder\.id\)/)
+  assert.match(familyDashboardSource, /elderApi\.alerts\(currentElder\.id\)/)
+  assert.match(familyDashboardSource, /elderApi\.currentTrip\(currentElder\.id\)/)
+  assert.match(familyDashboardSource, /elderApi\.geofence\(currentElder\.id\)/)
   assert.match(childHomeSource, /locationApi\.track\(trip\.id\)/)
 
   // Verify Family does NOT connect to browser geolocation directly
