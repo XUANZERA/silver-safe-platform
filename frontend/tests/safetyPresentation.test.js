@@ -4,7 +4,8 @@ import test from 'node:test'
 import {
   presentAlertWorkflow,
   presentRisk,
-  presentSafety
+  presentSafety,
+  selectFamilyAlert
 } from '../src/services/safetyPresentation.js'
 
 test('unavailable backend state never renders as safe', () => {
@@ -59,11 +60,39 @@ test('PRESENTATION-002 unknown location health cannot produce a success tone', (
   assert.equal(presentSafety(view).location, '定位状态未知')
 })
 
+test('SOS emergency/new presentation includes a clear title, pending status, and creation time', () => {
+  const workflow = presentAlertWorkflow({
+    id: 42,
+    type: 'emergency',
+    status: 'new',
+    occurred_at: '2026-10-07T08:30:00Z'
+  })
+
+  assert.equal(workflow.label, '老人发起紧急求助')
+  assert.equal(workflow.detail, '待处理')
+  assert.equal(workflow.tone, 'danger')
+  assert.match(workflow.createdAt, /^创建时间：.+/)
+})
+
+test('SOS alert is prioritized over a later open geofence event', () => {
+  const emergency = { id: 42, type: 'emergency', status: 'new' }
+  const geofence = { id: 43, type: 'geofence_exit', status: 'new' }
+
+  assert.equal(selectFamilyAlert(geofence, [geofence, emergency]), emergency)
+})
+
+test('REAL empty and unavailable alert states remain distinct', () => {
+  assert.equal(presentAlertWorkflow(selectFamilyAlert(null, []), true).label, '暂无告警')
+  const unavailable = presentAlertWorkflow(null, false)
+  assert.equal(unavailable.label, '告警状态暂时无法获取')
+  assert.notEqual(unavailable.label, '暂无告警')
+})
+
 test('PRESENTATION-003 unavailable risk and alert use neutral tones', () => {
   assert.equal(presentRisk(null, false).tone, 'neutral')
   assert.deepEqual(presentAlertWorkflow(null, false), {
-    label: '事件处置状态不可用',
-    detail: '无法获取最新事件状态',
+    label: '告警状态暂时无法获取',
+    detail: '请稍后刷新状态',
     tone: 'neutral'
   })
 })

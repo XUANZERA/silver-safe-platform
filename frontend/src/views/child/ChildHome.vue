@@ -23,7 +23,8 @@ import {
   presentAlertWorkflow,
   presentLocationHealth,
   presentRisk,
-  presentSafety
+  presentSafety,
+  selectFamilyAlert
 } from '../../services/safetyPresentation'
 
 const router = useRouter()
@@ -32,6 +33,7 @@ const activeAlert = ref(false)
 const stateAvailable = ref(!realMode)
 const stateLoading = ref(false)
 const stateError = ref('')
+const alertSyncState = ref(realMode ? 'loading' : 'ready')
 const safetyView = ref(null)
 const geofence = ref(null)
 const geofenceRadiusDraft = ref(100)
@@ -62,13 +64,15 @@ const locationPresentation = computed(() => presentLocationHealth(
   safetyView.value,
   stateAvailable.value
 ))
-const latestOpenAlert = computed(() => {
-  const fromSafety = safetyView.value?.latest_open_alert
-  if (fromSafety) return fromSafety
-  return alerts.value.find((item) => item.status === 'new' || item.status === 'processing') || null
-})
+const familyAlert = computed(() => selectFamilyAlert(
+  safetyView.value?.latest_open_alert,
+  alerts.value
+))
 const riskPresentation = computed(() => presentRisk(safetyView.value, stateAvailable.value))
-const alertPresentation = computed(() => presentAlertWorkflow(latestOpenAlert.value, stateAvailable.value))
+const alertPresentation = computed(() => presentAlertWorkflow(
+  familyAlert.value,
+  stateAvailable.value && alertSyncState.value === 'ready'
+))
 const geofenceStatus = computed(() => {
   if (!stateAvailable.value) return '状态不可用'
   if (!geofence.value) return '未配置'
@@ -116,9 +120,13 @@ async function loadAuthoritativeState(syncGeofenceDraft = false) {
     const currentElder = elderList?.items?.[0]
     if (!currentElder) throw new Error('没有可查看的老人资料')
     const elderChanged = elder.id !== null && elder.id !== currentElder.id
-    const [view, alertList, trip, configuredGeofence] = await Promise.all([
+    const alertRequest = elderApi.alerts(currentElder.id).then(
+      (alertList) => ({ ok: true, alertList }),
+      (error) => ({ ok: false, error })
+    )
+    const [view, alertResult, trip, configuredGeofence] = await Promise.all([
       elderApi.safety(currentElder.id),
-      elderApi.alerts(currentElder.id),
+      alertRequest,
       elderApi.currentTrip(currentElder.id),
       elderApi.geofence(currentElder.id)
     ])
@@ -150,7 +158,13 @@ async function loadAuthoritativeState(syncGeofenceDraft = false) {
       geofenceEnabledDraft.value = configuredGeofence?.enabled ?? true
       geofenceDraftDirty.value = false
     }
-    alerts.value = alertList?.items || []
+    if (alertResult.ok) {
+      alerts.value = alertResult.alertList?.items || []
+      alertSyncState.value = 'ready'
+    } else {
+      alertSyncState.value = 'error'
+      console.warn('家属端告警状态同步失败', alertResult.error)
+    }
     stateAvailable.value = true
     stateError.value = ''
     if (
@@ -444,9 +458,10 @@ async function confirmSavedGeofenceState() {
       <section v-if="realMode" class="event-card" :class="alertPresentation.tone">
         <van-icon name="records-o" />
         <div>
-          <small>事件处置</small>
+          <small>告警状态</small>
           <strong>{{ alertPresentation.label }}</strong>
           <p v-if="alertPresentation.detail">{{ alertPresentation.detail }}</p>
+          <p v-if="alertPresentation.createdAt">{{ alertPresentation.createdAt }}</p>
         </div>
       </section>
       <section v-else class="notice-card demo">
@@ -531,7 +546,7 @@ async function confirmSavedGeofenceState() {
 .brand strong{line-height:1;transform:translateY(3px)}
 </style>
 <style scoped>
-.online.unavailable{color:#b36b45}.online.unavailable i{background:#d18a60}.location-info button:disabled{cursor:wait;opacity:.6}.status-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.status-grid div{padding:11px;border-radius:10px;background:#fff}.status-grid small,.status-grid strong{display:block}.status-grid small{color:#969799;font-size:9px}.status-grid strong{margin-top:4px;font-size:11px}.notice-card small,.event-card small{display:block;margin-bottom:3px;color:inherit;font-size:9px}.notice-card.neutral{color:#7d6f67;background:#f1efed}.notice-card.neutral p{color:#7d6f67}.notice-card.warning{color:#a26725;background:#fff7e8}.notice-card.warning p{color:#966b37}.notice-card.danger{color:#c64048;background:#fff0f1}.notice-card.danger p{color:#a4555a}.notice-card.demo{color:#6657a5;background:#f1effa}.notice-card.demo p{color:#756c91}.event-card{display:flex;gap:10px;align-items:flex-start;margin-top:10px;padding:14px;color:#646566;border-radius:10px;background:#fff}.event-card>.van-icon{font-size:20px}.event-card strong{font-size:13px}.event-card p{margin-top:3px;font-size:10px}.event-card.warning{color:#a26725;background:#fff7e8}.event-card.processing{color:#5d5a9d;background:#f1effa}.event-card.success{color:#3d9a6a;background:#eaf8f1}.event-card.neutral{color:#7d6f67;background:#f1efed}.attention-unavailable{margin-top:13px;padding:12px;color:#7d6f67;border:1px solid #dedad7;border-radius:22px;background:#f5f3f1;font-size:12px;text-align:center}
+.online.unavailable{color:#b36b45}.online.unavailable i{background:#d18a60}.location-info button:disabled{cursor:wait;opacity:.6}.status-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.status-grid div{padding:11px;border-radius:10px;background:#fff}.status-grid small,.status-grid strong{display:block}.status-grid small{color:#969799;font-size:9px}.status-grid strong{margin-top:4px;font-size:11px}.notice-card small,.event-card small{display:block;margin-bottom:3px;color:inherit;font-size:9px}.notice-card.neutral{color:#7d6f67;background:#f1efed}.notice-card.neutral p{color:#7d6f67}.notice-card.warning{color:#a26725;background:#fff7e8}.notice-card.warning p{color:#966b37}.notice-card.danger{color:#c64048;background:#fff0f1}.notice-card.danger p{color:#a4555a}.notice-card.demo{color:#6657a5;background:#f1effa}.notice-card.demo p{color:#756c91}.event-card{display:flex;gap:10px;align-items:flex-start;margin-top:10px;padding:14px;color:#646566;border-radius:10px;background:#fff}.event-card>.van-icon{font-size:20px}.event-card strong{font-size:13px}.event-card p{margin-top:3px;font-size:10px}.event-card.warning{color:#a26725;background:#fff7e8}.event-card.danger{color:#c64048;background:#fff0f1}.event-card.danger p{color:#a4555a}.event-card.processing{color:#5d5a9d;background:#f1effa}.event-card.success{color:#3d9a6a;background:#eaf8f1}.event-card.neutral{color:#7d6f67;background:#f1efed}.attention-unavailable{margin-top:13px;padding:12px;color:#7d6f67;border:1px solid #dedad7;border-radius:22px;background:#f5f3f1;font-size:12px;text-align:center}
 .status-grid div.warning{color:#a26725;background:#fff7e8}
 </style>
 <style scoped>

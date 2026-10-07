@@ -29,6 +29,8 @@ const ALERT_STATUS_LABELS = {
   resolved: '已解决'
 }
 
+const OPEN_ALERT_STATUSES = new Set(['new', 'processing'])
+
 const ALERT_PRESENTATION = {
   new: { label: '等待工作人员接单', tone: 'warning' },
   processing: { label: '工作人员处理中', tone: 'processing' },
@@ -53,14 +55,14 @@ export function presentRisk(view, available = true) {
 export function presentAlertWorkflow(alert, available = true) {
   if (!available) {
     return {
-      label: '事件处置状态不可用',
-      detail: '无法获取最新事件状态',
+      label: '告警状态暂时无法获取',
+      detail: '请稍后刷新状态',
       tone: 'neutral'
     }
   }
   if (!alert) {
     return {
-      label: '当前没有待处理事件',
+      label: '暂无告警',
       detail: '',
       tone: 'neutral'
     }
@@ -69,11 +71,46 @@ export function presentAlertWorkflow(alert, available = true) {
     label: ALERT_STATUS_LABELS[alert.status] || '事件状态未知',
     tone: 'neutral'
   }
+  if (alert.type === 'emergency') {
+    return {
+      label: '老人发起紧急求助',
+      detail: alert.status === 'new'
+        ? '待处理'
+        : ALERT_STATUS_LABELS[alert.status] || '告警状态未知',
+      tone: alert.status === 'new' ? 'danger' : status.tone,
+      createdAt: formatAlertCreatedAt(alert.occurred_at)
+    }
+  }
   return {
     label: status.label,
     detail: ALERT_TYPE_LABELS[alert.type] || alert.type,
     tone: status.tone
   }
+}
+
+export function selectFamilyAlert(safetyAlert, alertItems) {
+  const openAlerts = Array.isArray(alertItems)
+    ? alertItems.filter((item) => OPEN_ALERT_STATUSES.has(item?.status))
+    : []
+  const emergencyAlert = openAlerts.find((item) => item.type === 'emergency')
+  if (emergencyAlert) return emergencyAlert
+  if (safetyAlert && OPEN_ALERT_STATUSES.has(safetyAlert.status)) return safetyAlert
+  return openAlerts[0] || null
+}
+
+function formatAlertCreatedAt(value) {
+  if (!value) return '创建时间：时间未知'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '创建时间：时间未知'
+  return `创建时间：${date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })}`
 }
 
 function formatRecordedAt(value) {

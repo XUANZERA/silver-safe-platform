@@ -7,7 +7,7 @@ from sqlalchemy import inspect, select, text
 
 from app.core.security import hash_password
 from app.db.session import SessionLocal, engine
-from app.models.alert import AlertLog
+from app.models.alert import Alert, AlertLog
 from app.models.location import Location
 from app.models.security import AuditLog
 from app.models.user import User
@@ -115,6 +115,52 @@ def test_sos_deduplication_and_idempotent_operator_workflow(client: TestClient) 
     assert detail["alert"]["handler"]["username"] == "operator01"
 
 
+def test_active_trip_sos_is_stored_and_returned_to_bound_family(client: TestClient) -> None:
+    trip_id, elder_id = create_active_trip(client)
+    sos_response = create_sos(client, trip_id)
+
+    assert sos_response.status_code == 201
+    sos_alert = sos_response.json()["data"]
+    assert sos_alert["type"] == "emergency"
+    assert sos_alert["status"] == "new"
+    assert sos_alert["elder_id"] == elder_id
+    assert sos_alert["trip_id"] == trip_id
+    assert sos_alert["occurred_at"]
+    assert sos_alert["handler"] is None
+    assert sos_alert["accepted_at"] is None
+    assert sos_alert["resolved_at"] is None
+    assert sos_alert["resolution"] is None
+
+    with SessionLocal() as session:
+        stored_alert = session.scalar(select(Alert).where(Alert.id == sos_alert["id"]))
+
+    assert stored_alert is not None
+    assert stored_alert.elder_id == elder_id
+    assert stored_alert.trip_id == trip_id
+    assert stored_alert.type == "emergency"
+    assert stored_alert.status == "new"
+    assert stored_alert.handler_id is None
+    assert stored_alert.resolved_at is None
+
+    family_elder_list = client.get(f"{API}/elders", headers=headers(client, "family01"))
+    assert family_elder_list.status_code == 200
+    assert [item["id"] for item in family_elder_list.json()["data"]["items"]] == [elder_id]
+
+    family_alerts = client.get(
+        f"{API}/elders/{elder_id}/alerts",
+        headers=headers(client, "family01"),
+    )
+    assert family_alerts.status_code == 200
+    matching_alert = next(
+        item for item in family_alerts.json()["data"]["items"] if item["id"] == sos_alert["id"]
+    )
+    assert matching_alert["id"] == sos_alert["id"]
+    assert matching_alert["type"] == "emergency"
+    assert matching_alert["status"] == "new"
+    assert matching_alert["elder_id"] == elder_id
+    assert matching_alert["trip_id"] == trip_id
+
+
 def test_alert_must_be_accepted_before_resolution(client: TestClient) -> None:
     trip_id, _ = create_active_trip(client)
     alert_id = create_sos(client, trip_id).json()["data"]["id"]
@@ -204,7 +250,7 @@ def test_concurrent_sos_requests_are_serialized(client: TestClient) -> None:
 
 
 def test_alert_detail_does_not_leak_other_elder_event_existence(client: TestClient) -> None:
-    trip_id, _ = create_active_trip(client)
+    trip_id, elder_id = create_active_trip(client)
     alert_id = create_sos(client, trip_id).json()["data"]["id"]
     with SessionLocal() as session:
         if session.scalar(select(User).where(User.username == "family02")) is None:
@@ -226,8 +272,14 @@ def test_alert_detail_does_not_leak_other_elder_event_existence(client: TestClie
         f"{API}/alerts/{alert_id}",
         headers={"Authorization": f"Bearer {family_token}"},
     )
+    unbound_list = client.get(
+        f"{API}/elders/{elder_id}/alerts",
+        headers={"Authorization": f"Bearer {family_token}"},
+    )
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "ALERT_NOT_FOUND"
+    assert unbound_list.status_code == 404
+    assert unbound_list.json()["error"]["code"] == "ELDER_NOT_FOUND"
 
 
 def test_sensitive_alert_polling_audit_is_window_deduplicated(client: TestClient) -> None:
