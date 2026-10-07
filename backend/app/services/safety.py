@@ -18,7 +18,10 @@ from app.services.trips import get_current_trip
 OPEN_ALERT_STATUSES = ("new", "processing")
 
 
-def _location_health(location: Location | None, calculated_at: datetime) -> LocationHealth:
+def assess_location_health(
+    location: Location | None,
+    calculated_at: datetime,
+) -> LocationHealth:
     if location is None:
         return LocationHealth.NO_DATA
 
@@ -42,7 +45,7 @@ def get_safety_view(db: Session, *, elder_id: int) -> SafetyViewResponse:
     if trip is not None:
         latest_location = get_latest_trip_location(db, trip.id)
 
-    location_health = _location_health(latest_location, calculated_at)
+    location_health = assess_location_health(latest_location, calculated_at)
     risk_status = None
     if trip is not None and trip.status == "active" and latest_location is not None:
         evaluation = evaluate_geofence_risk(db, trip_id=trip.id, elder_id=elder_id)

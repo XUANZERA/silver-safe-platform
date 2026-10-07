@@ -121,14 +121,22 @@ export const api = {
   delete: (path) => request(path, { method: 'DELETE' })
 }
 
-export const elderApi = {
-  list: () => request('/elders'),
-  detail: (elderId) => request(`/elders/${elderId}`),
-  geofence: (elderId) => request(`/elders/${elderId}/geofence`),
-  safety: (elderId) => request(`/elders/${elderId}/safety`),
-  currentTrip: (elderId) => request(`/elders/${elderId}/current-trip`),
-  alerts: (elderId, status) => request(`/elders/${elderId}/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+export function createElderApi(requestImpl) {
+  return {
+    list: () => requestImpl('/elders'),
+    detail: (elderId) => requestImpl(`/elders/${elderId}`),
+    geofence: (elderId) => requestImpl(`/elders/${elderId}/geofence`),
+    updateGeofence: (elderId, { radius_meters, enabled }) => requestImpl(
+      `/elders/${elderId}/geofence`,
+      { method: 'PUT', body: JSON.stringify({ radius_meters, enabled }) }
+    ),
+    safety: (elderId) => requestImpl(`/elders/${elderId}/safety`),
+    currentTrip: (elderId) => requestImpl(`/elders/${elderId}/current-trip`),
+    alerts: (elderId, status) => requestImpl(`/elders/${elderId}/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+  }
 }
+
+export const elderApi = createElderApi(request)
 
 export const tripApi = {
   create: (destination) => request('/trips', { method: 'POST', body: JSON.stringify({ destination }) }),

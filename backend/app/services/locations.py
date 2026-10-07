@@ -172,6 +172,21 @@ def get_latest_trip_location(db: Session, trip_id: int) -> Location | None:
     )
 
 
+def get_latest_elder_location(db: Session, elder_id: int) -> Location | None:
+    """Return the newest WGS84 point from the allowlisted H5 source marker, not attestation."""
+    return db.scalar(
+        select(Location)
+        .join(Trip, Location.trip_id == Trip.id)
+        .where(
+            Trip.elder_id == elder_id,
+            Location.source_crs == CoordinateReferenceSystem.WGS84.value,
+            Location.source == LocationSource.H5.value,
+        )
+        .order_by(Location.recorded_at.desc(), Location.id.desc())
+        .limit(1)
+    )
+
+
 def list_trip_locations(
     db: Session,
     *,

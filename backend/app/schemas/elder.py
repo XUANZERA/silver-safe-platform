@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.coordinates import CoordinateReferenceSystem
 
@@ -27,3 +27,10 @@ class GeofenceResponse(BaseModel):
     radius_meters: int
     enabled: bool
     crs: CoordinateReferenceSystem | None = None
+
+
+class GeofenceUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    radius_meters: int = Field(ge=50, le=5000)
+    enabled: bool

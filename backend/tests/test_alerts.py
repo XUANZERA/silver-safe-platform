@@ -371,12 +371,13 @@ def test_openapi_contains_only_expected_alert_operations(client: TestClient) -> 
     assert f"{API}/alerts/{{alert_id}}/resolve" in paths
     assert f"{API}/ai/chat" in paths
     assert f"{API}/elders/{{elder_id}}/safety" in paths
+    assert "put" in paths[f"{API}/elders/{{elder_id}}/geofence"]
     operations = sum(
         method in {"get", "post", "put", "patch", "delete"}
         for path in paths.values()
         for method in path
     )
-    assert operations == 25
+    assert operations == 26
 
 
 def test_sos_does_not_consume_legacy_null_crs_location(client: TestClient) -> None:

@@ -1,9 +1,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { showDialog, showSuccessToast } from 'vant'
+import { showConfirmDialog, showDialog, showSuccessToast } from 'vant'
 import MapCanvas from '../../components/map/MapCanvas.vue'
 import { elderApi, isApiConfigured, locationApi } from '../../services/api'
+import {
+  createSingleFlightAction,
+  saveGeofenceForMode
+} from '../../services/geofenceConfiguration'
 import {
   convertCanonicalTrack,
   createLatestLocationCoordinator
@@ -29,6 +33,13 @@ const stateAvailable = ref(!realMode)
 const stateLoading = ref(false)
 const stateError = ref('')
 const safetyView = ref(null)
+const geofence = ref(null)
+const geofenceRadiusDraft = ref(100)
+const geofenceEnabledDraft = ref(true)
+const geofenceDraftDirty = ref(false)
+const geofenceActionPending = ref(false)
+const geofenceSyncStatus = ref('IDLE')
+const geofenceError = ref('')
 const alerts = ref([])
 const mapStatus = ref('READY')
 const latestMapPoint = ref(null)
@@ -58,6 +69,22 @@ const latestOpenAlert = computed(() => {
 })
 const riskPresentation = computed(() => presentRisk(safetyView.value, stateAvailable.value))
 const alertPresentation = computed(() => presentAlertWorkflow(latestOpenAlert.value, stateAvailable.value))
+const geofenceStatus = computed(() => {
+  if (!stateAvailable.value) return '状态不可用'
+  if (!geofence.value) return '未配置'
+  return geofence.value.enabled ? '已启用' : '已停用'
+})
+const geofenceSyncLabel = computed(() => ({
+  SAVING: '正在确认并保存…',
+  CONFIRMED: '后端状态已确认',
+  WRITE_FAILED: '围栏设置失败',
+  SAVED_REFRESH_FAILED: '围栏已保存，状态刷新失败',
+  SAVED_REFRESH_UNCONFIRMED: '围栏已保存，状态尚未确认'
+}[geofenceSyncStatus.value] || ''))
+const geofenceNeedsConfirmation = computed(() => (
+  geofenceSyncStatus.value === 'SAVED_REFRESH_FAILED' ||
+  geofenceSyncStatus.value === 'SAVED_REFRESH_UNCONFIRMED'
+))
 
 function applySavedItinerary() {
   const items = loadDemoItinerary(realMode, sessionStorage)
@@ -76,23 +103,34 @@ function formatTime(value) {
 }
 
 let currentLoadGeneration = 0
+let geofenceActionGeneration = 0
+const runGeofenceAction = createSingleFlightAction()
 
-async function loadAuthoritativeState() {
+async function loadAuthoritativeState(syncGeofenceDraft = false) {
   const loadGen = ++currentLoadGeneration
   stateLoading.value = true
   try {
     const elderList = await elderApi.list()
-    if (loadGen !== currentLoadGeneration) return
+    if (loadGen !== currentLoadGeneration) return false
 
     const currentElder = elderList?.items?.[0]
     if (!currentElder) throw new Error('没有可查看的老人资料')
-    const [view, alertList, trip] = await Promise.all([
+    const elderChanged = elder.id !== null && elder.id !== currentElder.id
+    const [view, alertList, trip, configuredGeofence] = await Promise.all([
       elderApi.safety(currentElder.id),
       elderApi.alerts(currentElder.id),
-      elderApi.currentTrip(currentElder.id)
+      elderApi.currentTrip(currentElder.id),
+      elderApi.geofence(currentElder.id)
     ])
-    if (loadGen !== currentLoadGeneration) return
+    if (loadGen !== currentLoadGeneration) return false
     if (!view) throw new Error('后端未返回安全状态')
+
+    if (elderChanged) {
+      geofenceActionGeneration++
+      geofenceSyncStatus.value = 'IDLE'
+      geofenceError.value = ''
+      geofenceDraftDirty.value = false
+    }
 
     const latestLocation = view.latest_location
     const tripIdSnapshot = trip?.id || null
@@ -106,9 +144,22 @@ async function loadAuthoritativeState() {
       update: formatTime(latestLocation?.recorded_at)
     })
     safetyView.value = view
+    geofence.value = configuredGeofence || null
+    if (syncGeofenceDraft || !geofenceDraftDirty.value) {
+      geofenceRadiusDraft.value = configuredGeofence?.radius_meters ?? 100
+      geofenceEnabledDraft.value = configuredGeofence?.enabled ?? true
+      geofenceDraftDirty.value = false
+    }
     alerts.value = alertList?.items || []
     stateAvailable.value = true
     stateError.value = ''
+    if (
+      geofenceSyncStatus.value === 'SAVED_REFRESH_FAILED' ||
+      geofenceSyncStatus.value === 'SAVED_REFRESH_UNCONFIRMED'
+    ) {
+      geofenceSyncStatus.value = 'CONFIRMED'
+      geofenceError.value = ''
+    }
 
     if (latestLocation) {
       try {
@@ -158,9 +209,10 @@ async function loadAuthoritativeState() {
         trackPoints.value = []
       }
     }
+    return true
   } catch (error) {
     if (loadGen !== currentLoadGeneration) {
-      return
+      return false
     }
     error.loadGen = loadGen
     throw error
@@ -204,6 +256,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   currentLoadGeneration++
+  geofenceActionGeneration++
   locationCoordinator.reset()
   polling.stop()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -230,6 +283,119 @@ function call() {
 
 function toggleDemoAttention() {
   activeAlert.value = nextFamilyAttentionState(realMode, activeAlert.value)
+}
+
+function markGeofenceDraftDirty() {
+  geofenceDraftDirty.value = true
+  geofenceError.value = ''
+}
+
+async function updateGeofence() {
+  if (!realMode || !elder.id) return
+
+  return runGeofenceAction(async () => {
+    const elderIdSnapshot = elder.id
+    const actionGeneration = ++geofenceActionGeneration
+    const isCurrent = () => (
+      elder.id === elderIdSnapshot && actionGeneration === geofenceActionGeneration
+    )
+    geofenceActionPending.value = true
+    geofenceSyncStatus.value = 'SAVING'
+    geofenceError.value = ''
+
+    try {
+      try {
+        await showConfirmDialog({
+          title: '确认设置安全围栏',
+          message: geofenceEnabledDraft.value
+            ? `将以老人最近一次有效定位作为安全围栏中心，半径设为 ${geofenceRadiusDraft.value} 米并启用围栏。是否继续？`
+            : `将停用当前安全围栏，并将半径设为 ${geofenceRadiusDraft.value} 米。是否继续？`,
+          confirmButtonText: '确认'
+        })
+      } catch {
+        if (isCurrent()) geofenceSyncStatus.value = 'IDLE'
+        return { status: 'CANCELED' }
+      }
+
+      if (!isCurrent()) return { status: 'CANCELED' }
+
+      let result
+      try {
+        result = await saveGeofenceForMode({
+          realMode,
+          isCurrent,
+          update: () => elderApi.updateGeofence(elderIdSnapshot, {
+            radius_meters: geofenceRadiusDraft.value,
+            enabled: geofenceEnabledDraft.value
+          }),
+          onSaved: (savedGeofence) => {
+            geofence.value = savedGeofence
+            geofenceRadiusDraft.value = savedGeofence.radius_meters
+            geofenceEnabledDraft.value = savedGeofence.enabled
+            geofenceDraftDirty.value = false
+          },
+          refresh: () => loadAuthoritativeState(true)
+        })
+      } catch (error) {
+        if (isCurrent()) {
+          geofenceSyncStatus.value = 'WRITE_FAILED'
+          geofenceError.value = error instanceof Error ? error.message : '安全围栏写入失败'
+          showDialog({ title: '安全围栏设置失败', message: geofenceError.value })
+        }
+        return { status: 'WRITE_FAILED', error }
+      }
+
+      if (!isCurrent()) return result
+      geofenceSyncStatus.value = result.status
+      if (result.status === 'CONFIRMED') {
+        geofenceError.value = ''
+        showSuccessToast('安全围栏已保存并确认')
+      } else if (result.status === 'SAVED_REFRESH_FAILED') {
+        geofenceError.value = '围栏已保存，但状态刷新失败，请稍后刷新页面确认。'
+        showDialog({ title: '围栏已保存，状态未确认', message: geofenceError.value })
+      } else if (result.status === 'SAVED_REFRESH_UNCONFIRMED') {
+        geofenceError.value = '围栏已保存，但本次状态刷新未能确认，请稍后刷新页面确认。'
+        showDialog({ title: '围栏已保存，状态未确认', message: geofenceError.value })
+      }
+      return result
+    } finally {
+      geofenceActionPending.value = false
+    }
+  })
+}
+
+async function confirmSavedGeofenceState() {
+  if (!realMode || !elder.id) return
+
+  return runGeofenceAction(async () => {
+    const elderIdSnapshot = elder.id
+    const actionGeneration = ++geofenceActionGeneration
+    const isCurrent = () => (
+      elder.id === elderIdSnapshot && actionGeneration === geofenceActionGeneration
+    )
+    geofenceActionPending.value = true
+    try {
+      const refreshed = await loadAuthoritativeState(true)
+      if (!isCurrent()) return { status: 'SAVED_REFRESH_UNCONFIRMED' }
+      if (refreshed) {
+        geofenceSyncStatus.value = 'CONFIRMED'
+        geofenceError.value = ''
+        showSuccessToast('已保存的安全围栏状态已确认')
+        return { status: 'CONFIRMED' }
+      }
+      geofenceSyncStatus.value = 'SAVED_REFRESH_UNCONFIRMED'
+      geofenceError.value = '围栏已保存，但状态刷新仍未确认，请稍后重试。'
+      return { status: 'SAVED_REFRESH_UNCONFIRMED' }
+    } catch (error) {
+      if (isCurrent()) {
+        geofenceSyncStatus.value = 'SAVED_REFRESH_FAILED'
+        geofenceError.value = `围栏已保存，但状态刷新失败：${error instanceof Error ? error.message : '未知错误'}`
+      }
+      return { status: 'SAVED_REFRESH_FAILED', error }
+    } finally {
+      geofenceActionPending.value = false
+    }
+  })
 }
 </script>
 <template>
@@ -287,6 +453,55 @@ function toggleDemoAttention() {
         <van-icon name="shield-o" />
         <div><strong>演示状态：围栏内</strong><p>这是 Mock 展示，不代表后端真实安全结论。</p></div>
       </section>
+      <section v-if="realMode" class="geofence-settings">
+        <div class="geofence-settings__heading">
+          <strong>安全围栏设置</strong>
+          <span>{{ geofenceStatus }}</span>
+        </div>
+        <p>当前半径：{{ stateAvailable ? (geofence?.radius_meters ?? '—') : '—' }} 米</p>
+        <p>中心来源：基于老人最近一次有效定位 <span>({{ stateAvailable ? (geofence ? '已设置' : '尚未设置') : '状态不可用' }})</span></p>
+        <p v-if="geofenceSyncLabel" class="geofence-sync-status">{{ geofenceSyncLabel }}</p>
+        <label class="geofence-radius">
+          <span>设置半径（50–5000 米）</span>
+          <input
+            v-model.number="geofenceRadiusDraft"
+            type="number"
+            min="50"
+            max="5000"
+            step="50"
+            :disabled="!stateAvailable || geofenceActionPending"
+            @input="markGeofenceDraftDirty"
+          />
+        </label>
+        <label class="geofence-enabled">
+          <input
+            v-model="geofenceEnabledDraft"
+            type="checkbox"
+            :disabled="!stateAvailable || geofenceActionPending"
+            @change="markGeofenceDraftDirty"
+          />
+          <span>启用安全围栏</span>
+        </label>
+        <button
+          v-if="geofenceNeedsConfirmation"
+          class="geofence-submit"
+          type="button"
+          :disabled="!stateAvailable || geofenceActionPending"
+          @click="confirmSavedGeofenceState"
+        >
+          {{ geofenceActionPending ? '正在确认…' : '刷新以确认已保存围栏' }}
+        </button>
+        <button
+          v-else
+          class="geofence-submit"
+          type="button"
+          :disabled="!stateAvailable || geofenceActionPending"
+          @click="updateGeofence"
+        >
+          {{ geofenceActionPending ? '正在保存…' : '以最新定位更新围栏' }}
+        </button>
+        <p v-if="geofenceError" class="geofence-error" role="alert">{{ geofenceError }}</p>
+      </section>
       <section class="child-actions">
         <button type="button" @click="router.push('/schedule')"><span class="purple"><van-icon name="todo-list-o"/></span><strong>查看出游计划</strong><small>了解今天的安排</small></button>
         <button type="button" @click="call"><span class="red"><van-icon name="records-o"/></span><strong>查看老人联系信息</strong><small>{{ realMode ? '当前接口未提供可拨号码' : '电话为脱敏演示号码' }}</small></button>
@@ -318,4 +533,7 @@ function toggleDemoAttention() {
 <style scoped>
 .online.unavailable{color:#b36b45}.online.unavailable i{background:#d18a60}.location-info button:disabled{cursor:wait;opacity:.6}.status-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.status-grid div{padding:11px;border-radius:10px;background:#fff}.status-grid small,.status-grid strong{display:block}.status-grid small{color:#969799;font-size:9px}.status-grid strong{margin-top:4px;font-size:11px}.notice-card small,.event-card small{display:block;margin-bottom:3px;color:inherit;font-size:9px}.notice-card.neutral{color:#7d6f67;background:#f1efed}.notice-card.neutral p{color:#7d6f67}.notice-card.warning{color:#a26725;background:#fff7e8}.notice-card.warning p{color:#966b37}.notice-card.danger{color:#c64048;background:#fff0f1}.notice-card.danger p{color:#a4555a}.notice-card.demo{color:#6657a5;background:#f1effa}.notice-card.demo p{color:#756c91}.event-card{display:flex;gap:10px;align-items:flex-start;margin-top:10px;padding:14px;color:#646566;border-radius:10px;background:#fff}.event-card>.van-icon{font-size:20px}.event-card strong{font-size:13px}.event-card p{margin-top:3px;font-size:10px}.event-card.warning{color:#a26725;background:#fff7e8}.event-card.processing{color:#5d5a9d;background:#f1effa}.event-card.success{color:#3d9a6a;background:#eaf8f1}.event-card.neutral{color:#7d6f67;background:#f1efed}.attention-unavailable{margin-top:13px;padding:12px;color:#7d6f67;border:1px solid #dedad7;border-radius:22px;background:#f5f3f1;font-size:12px;text-align:center}
 .status-grid div.warning{color:#a26725;background:#fff7e8}
+</style>
+<style scoped>
+.geofence-settings{display:grid;gap:10px;margin-top:12px;padding:15px;border-radius:12px;background:#fff}.geofence-settings__heading{display:flex;align-items:center;justify-content:space-between}.geofence-settings__heading strong{font-size:14px}.geofence-settings__heading span,.geofence-settings p{color:#77717f;font-size:11px}.geofence-settings p{margin:0;line-height:1.5}.geofence-settings p span{color:#969799}.geofence-settings .geofence-sync-status{color:#6c5da8}.geofence-radius{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#646566;font-size:11px}.geofence-radius input{width:100px;padding:8px;border:1px solid #dedbe5;border-radius:8px;font:inherit}.geofence-enabled{display:flex;align-items:center;gap:8px;color:#646566;font-size:11px}.geofence-enabled input{width:16px;height:16px;accent-color:#667eea}.geofence-submit{padding:11px;color:#fff;border:0;border-radius:20px;background:#667eea;font-size:12px}.geofence-submit:disabled{cursor:wait;opacity:.55}.geofence-settings .geofence-error{color:#c64048}
 </style>
